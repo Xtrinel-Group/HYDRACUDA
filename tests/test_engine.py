@@ -1,9 +1,9 @@
-"""Unit tests for the BARACUDA policy engine."""
+"""Unit tests for the HYDRACUDA policy engine."""
 
 import pytest
 
-from baracuda.engine import PolicyEngine
-from baracuda.policy import Policy, ToolPolicy
+from hydracuda.engine import PolicyEngine
+from hydracuda.policy import Policy, ToolPolicy
 
 
 def make_policy(tools: dict[str, ToolPolicy]) -> Policy:

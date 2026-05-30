@@ -1,4 +1,4 @@
-"""YAML policy parser and validator for BARACUDA."""
+"""YAML policy parser and validator for HYDRACUDA."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,19 +18,19 @@ class ToolPolicy:
 
 @dataclass
 class Policy:
-    """Top-level policy configuration parsed from baracuda.yaml."""
+    """Top-level policy configuration parsed from hydracuda.yaml."""
 
     version: int
     tools: dict[str, ToolPolicy]
     mode: str = "enforce"
-    audit_path: str = ".baracuda/audit.db"
+    audit_path: str = ".hydracuda/audit.db"
 
 
 VALID_MODES = {"enforce", "shadow", "review"}
 
 
 def load_policy(path: str) -> Policy:
-    """Load and validate a baracuda.yaml policy file.
+    """Load and validate a hydracuda.yaml policy file.
 
     Raises ValueError with a descriptive message on invalid input.
     """
@@ -79,6 +79,6 @@ def load_policy(path: str) -> Policy:
             parameter_rules=tool_conf.get("parameter_rules"),
         )
 
-    audit_path = raw.get("audit_path", ".baracuda/audit.db")
+    audit_path = raw.get("audit_path", ".hydracuda/audit.db")
 
     return Policy(version=version, mode=mode, tools=tools, audit_path=audit_path)

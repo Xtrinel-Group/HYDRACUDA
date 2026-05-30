@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "baracuda"
-version = "0.1.1"
-description = "Runtime policy enforcement for AI tool calls. Define a YAML policy and intercept every MCP or LLM tool call before it executes."
+name = "hydracuda"
+version = "0.1.0"
+description = "Hybrid Runtime Access Control for Untrusted Delegated Actions. Runtime policy enforcement proxy for AI tool calls."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -22,11 +22,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Xtrinel-Group/BARACUDA"
-Issues = "https://github.com/Xtrinel-Group/BARACUDA/issues"
+Homepage = "https://github.com/Xtrinel-Group/HYDRACUDA"
+Issues = "https://github.com/Xtrinel-Group/HYDRACUDA/issues"
 
 [project.scripts]
-baracuda = "baracuda.cli:main"
+hydracuda = "hydracuda.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/baracuda"]
+packages = ["src/hydracuda"]

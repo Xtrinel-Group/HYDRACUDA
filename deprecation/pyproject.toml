@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "baracuda"
+version = "0.2.0"
+description = "Deprecated. This package has been renamed to hydracuda. Run: pip install hydracuda"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = []
+
+[project.urls]
+Homepage = "https://xtrinel.com/hydracuda"
+Repository = "https://github.com/Xtrinel-Group/HYDRACUDA"

@@ -1,13 +1,13 @@
 <p align="center">
-  <img src="https://assets.xtrinel.com/baracuda-full.svg" alt="BARACUDA" width="480" />
+  <img src="https://assets.xtrinel.com/hydracuda-full.svg" alt="HYDRACUDA" width="480" />
 </p>
 
-# BARACUDA
+# HYDRACUDA
 
-Behavior-Aware Runtime Access Control for Untrusted Delegated Actions.
+Hybrid Runtime Access Control for Untrusted Delegated Actions.
 
-BARACUDA is a lightweight, open source policy enforcement layer for AI tool calls.  
-Define a YAML policy file, drop BARACUDA in front of any MCP server or LLM tool layer, and every call is either allowed, denied, or held for review before it executes.
+HYDRACUDA is a lightweight, open source policy enforcement layer for AI tool calls.  
+Define a YAML policy file, drop HYDRACUDA in front of any MCP server or LLM tool layer, and every call is either allowed, denied, or held for review before it executes.
 
 The goal is simple: prevent tool-call abuse and out-of-scope actions while keeping everything local, auditable, and easy to reason about.
 
@@ -16,7 +16,7 @@ The goal is simple: prevent tool-call abuse and out-of-scope actions while keepi
 ## Features
 
 - **Language-agnostic policy file**  
-  Human-readable `baracuda.yaml` drives all decisions. Version-controlled, reviewable, and independent of any specific model or framework.
+  Human-readable `hydracuda.yaml` drives all decisions. Version-controlled, reviewable, and independent of any specific model or framework.
 
 - **Pre-dispatch enforcement**  
   Tool calls are intercepted before they execute, not after. The model cannot bypass the decision by reprompting.
@@ -37,17 +37,17 @@ The goal is simple: prevent tool-call abuse and out-of-scope actions while keepi
 
 ## Installation
 
-BARACUDA targets Python 3.10 and above.
+HYDRACUDA targets Python 3.10 and above.
 
 ```bash
-pip install baracuda
+pip install hydracuda
 ```
 
 To work on the project locally:
 
 ```bash
-git clone https://github.com/Xtrinel-Group/BARACUDA.git
-cd BARACUDA
+git clone https://github.com/Xtrinel-Group/HYDRACUDA.git
+cd HYDRACUDA
 pip install -e .
 ```
 
@@ -58,26 +58,26 @@ pip install -e .
 From a new or existing project directory:
 
 ```bash
-baracuda init
+hydracuda init
 ```
 
-This writes a starter `baracuda.yaml` with commented examples.
+This writes a starter `hydracuda.yaml` with commented examples.
 
 Validate the policy:
 
 ```bash
-baracuda check baracuda.yaml
+hydracuda check hydracuda.yaml
 ```
 
-If validation passes, you can integrate BARACUDA into your tool-calling layer.
+If validation passes, you can integrate HYDRACUDA into your tool-calling layer.
 
 ### Minimal integration example
 
 ```python
 import asyncio
-from baracuda.policy import load_policy
-from baracuda.engine import PolicyEngine
-from baracuda.proxy import ToolCallProxy
+from hydracuda.policy import load_policy
+from hydracuda.engine import PolicyEngine
+from hydracuda.proxy import ToolCallProxy
 
 
 async def handle_tool_call(tool_name: str, params: dict) -> dict:
@@ -87,7 +87,7 @@ async def handle_tool_call(tool_name: str, params: dict) -> dict:
 
 
 async def main() -> None:
-    policy = load_policy("baracuda.yaml")
+    policy = load_policy("hydracuda.yaml")
     engine = PolicyEngine(policy)
     proxy = ToolCallProxy(engine, audit_path=policy.audit_path)
 
@@ -109,7 +109,7 @@ In your real application, the LLM agent calls `proxy.call(...)` instead of invok
 
 ## Policy File
 
-BARACUDA policies are defined in YAML. The file created by `baracuda init` looks similar to this:
+HYDRACUDA policies are defined in YAML. The file created by `hydracuda init` looks similar to this:
 
 ```yaml
 version: 1
@@ -134,7 +134,7 @@ tools:
     rateLimit: "3/minute"
 
 audit:
-  path: .baracuda/audit.db
+  path: .hydracuda/audit.db
 ```
 
 Key concepts:
@@ -160,7 +160,7 @@ Key concepts:
 
 ## Audit Log
 
-BARACUDA writes one row per tool call decision to a local SQLite database.
+HYDRACUDA writes one row per tool call decision to a local SQLite database.
 
 Table schema:
 
@@ -181,12 +181,12 @@ This makes it easy to:
 
 ## Relationship to VAAST
 
-BARACUDA is maintained by Xtrinel, the team behind **VAAST**, an AI security scanner focused on AI attack surfaces and MCP tool-call abuse.
+HYDRACUDA is maintained by Xtrinel, the team behind **VAAST**, an AI security scanner focused on AI attack surfaces and MCP tool-call abuse.
 
 - VAAST is **offensive**: it discovers tool-call abuse and prompt injection vulnerabilities in AI-integrated applications before they reach production.
-- BARACUDA is **defensive**: it enforces the policies that prevent those same vulnerabilities from being exploited at runtime.
+- HYDRACUDA is **defensive**: it enforces the policies that prevent those same vulnerabilities from being exploited at runtime.
 
-They are fully decoupled. BARACUDA does not require VAAST, but future versions will support importing VAAST findings to auto-generate policy templates.
+They are fully decoupled. HYDRACUDA does not require VAAST, but future versions will support importing VAAST findings to auto-generate policy templates.
 
 ---
 
@@ -194,18 +194,18 @@ They are fully decoupled. BARACUDA does not require VAAST, but future versions w
 
 For full documentation, examples, and integration guides:
 
-- https://docs.xtrinel.com/baracuda
+- https://docs.xtrinel.com/hydracuda
 
 ---
 
 ## Logo and Branding
 
-BARACUDA assets are available under the Xtrinel brand guidelines:
+HYDRACUDA assets are available under the Xtrinel brand guidelines:
 
-- Full wordmark: `https://assets.xtrinel.com/baracuda-full.svg`
-- Icon: `https://assets.xtrinel.com/baracuda.svg`
+- Full wordmark: `https://assets.xtrinel.com/hydracuda-full.svg`
+- Icon: `https://assets.xtrinel.com/hydracuda.svg`
 
-You can use these in dashboards, internal docs, or integrations that surface BARACUDA decisions.
+You can use these in dashboards, internal docs, or integrations that surface HYDRACUDA decisions.
 
 ---
 
@@ -225,4 +225,4 @@ Please keep new features focused and security-oriented. If you are proposing a c
 
 ## License
 
-BARACUDA is released under the MIT License. See `LICENSE` for details.
+HYDRACUDA is released under the MIT License. See `LICENSE` for details.

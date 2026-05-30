@@ -1,15 +1,15 @@
-"""CLI interface for BARACUDA."""
+"""CLI interface for HYDRACUDA."""
 
 import argparse
 import sys
 from pathlib import Path
 
-from baracuda.policy import load_policy
+from hydracuda.policy import load_policy
 
 STARTER_POLICY = """\
 version: 1
 mode: enforce
-audit_path: .baracuda/audit.db
+audit_path: .hydracuda/audit.db
 
 tools:
   read_file:
@@ -30,13 +30,13 @@ tools:
     rate_limit: "3/minute"
 
 audit:
-  path: .baracuda/audit.db
+  path: .hydracuda/audit.db
 """
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Write a starter baracuda.yaml to the current directory."""
-    target = Path("baracuda.yaml")
+    """Write a starter hydracuda.yaml to the current directory."""
+    target = Path("hydracuda.yaml")
     if target.exists():
         print(f"{target} already exists. Not overwriting.")
         return
@@ -58,14 +58,14 @@ def cmd_check(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    """Entry point for the baracuda CLI."""
+    """Entry point for the hydracuda CLI."""
     parser = argparse.ArgumentParser(
-        prog="baracuda",
-        description="BARACUDA - Runtime policy enforcement for AI tool calls.",
+        prog="hydracuda",
+        description="HYDRACUDA - Runtime policy enforcement for AI tool calls.",
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("init", help="Create a starter baracuda.yaml in the current directory")
+    subparsers.add_parser("init", help="Create a starter hydracuda.yaml in the current directory")
 
     check_parser = subparsers.add_parser("check", help="Validate a policy file")
     check_parser.add_argument("policy_file", help="Path to the policy YAML file")

@@ -12,4 +12,6 @@ dist/
 *.egg-info/
 tests/test_live.py
 baracuda.yaml
+hydracuda.yaml
 .baracuda/
+.hydracuda/

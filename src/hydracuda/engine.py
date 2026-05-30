@@ -1,9 +1,9 @@
-"""Policy evaluation core for BARACUDA."""
+"""Policy evaluation core for HYDRACUDA."""
 
 import re
 from dataclasses import dataclass
 
-from baracuda.policy import Policy
+from hydracuda.policy import Policy
 
 
 @dataclass

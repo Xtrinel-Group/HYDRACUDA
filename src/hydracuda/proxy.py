@@ -1,4 +1,4 @@
-"""Tool call interception layer for BARACUDA."""
+"""Tool call interception layer for HYDRACUDA."""
 
 import json
 from datetime import datetime, timezone
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import aiosqlite
 
-from baracuda.engine import PolicyEngine
+from hydracuda.engine import PolicyEngine
 
 
 class ToolCallProxy:
