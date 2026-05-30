@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "baracuda"
-version = "0.1.0"
+version = "0.1.1"
 description = "Runtime policy enforcement for AI tool calls. Define a YAML policy and intercept every MCP or LLM tool call before it executes."
 readme = "README.md"
 license = { file = "LICENSE" }
