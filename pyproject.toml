@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "baracuda"
+version = "0.1.0"
+description = "Runtime policy enforcement for AI tool calls. Define a YAML policy and intercept every MCP or LLM tool call before it executes."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+keywords = ["ai", "security", "mcp", "llm", "guardrails", "policy"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Development Status :: 3 - Alpha",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "aiosqlite>=0.19",
+]
+
+[project.urls]
+Homepage = "https://github.com/Xtrinel-Group/BARACUDA"
+Issues = "https://github.com/Xtrinel-Group/BARACUDA/issues"
+
+[project.scripts]
+baracuda = "baracuda.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/baracuda"]
