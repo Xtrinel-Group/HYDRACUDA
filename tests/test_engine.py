@@ -10,12 +10,12 @@ def make_policy(tools: dict[str, ToolPolicy]) -> Policy:
     return Policy(version=1, tools=tools)
 
 
-def test_unconfigured_tool_defaults_to_allow():
+def test_unconfigured_tool_defaults_to_deny():
     engine = PolicyEngine(make_policy({}))
     decision = engine.evaluate("unknown_tool", {"arg": "value"})
 
-    assert decision.action == "allow"
-    assert "not configured" in decision.reason
+    assert decision.action == "deny"
+    assert "not listed in policy" in decision.reason
 
 
 def test_tool_explicitly_denied():
@@ -67,3 +67,24 @@ def test_no_deny_pattern_match_returns_allow():
 
     assert decision.action == "allow"
     assert decision.reason == "all policy checks passed"
+
+
+def test_unlisted_tool_denied_by_default():
+    engine = PolicyEngine(make_policy({
+        "read_file": ToolPolicy(allow=True),
+    }))
+    decision = engine.evaluate("send_email", {"to": "admin@corp.com"})
+
+    assert decision.action == "deny"
+    assert "send_email" in decision.reason
+    assert "default deny" in decision.reason
+
+
+def test_delete_record_blocked():
+    engine = PolicyEngine(make_policy({
+        "delete_record": ToolPolicy(allow=False),
+    }))
+    decision = engine.evaluate("delete_record", {"id": "usr_123"})
+
+    assert decision.action == "deny"
+    assert decision.reason == "tool blocked by policy"

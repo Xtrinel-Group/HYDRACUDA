@@ -26,8 +26,8 @@ class PolicyEngine:
         """Evaluate a tool call and return an allow/deny/review decision."""
         if tool_name not in self.policy.tools:
             return Decision(
-                action="allow",
-                reason=f"tool '{tool_name}' is not configured in policy",
+                action="deny",
+                reason=f"{tool_name}: not listed in policy — default deny",
                 tool=tool_name,
                 params=params,
             )

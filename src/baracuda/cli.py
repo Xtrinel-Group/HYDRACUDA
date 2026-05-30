@@ -7,30 +7,11 @@ from pathlib import Path
 from baracuda.policy import load_policy
 
 STARTER_POLICY = """\
-# BARACUDA Policy File
-# Defines which tool calls are allowed, denied, or require human review.
-
 version: 1
-
-# Mode controls enforcement behavior:
-#   enforce - block denied calls (default)
-#   shadow  - log decisions but never block
-#   review  - queue all calls for human approval
 mode: enforce
-
-# Path to the SQLite audit log (relative to working directory)
 audit_path: .baracuda/audit.db
 
-# Tool policies: map tool names to their rules.
-# Each tool can set:
-#   allow: true | false | "review"
-#   rate_limit: "N/minute" or "N/hour" (planned, not enforced in v0.1)
-#   parameter_rules:
-#     <param_name>:
-#       deny_patterns:
-#         - "<python regex>"
 tools:
-  # Example: allow read_file but block paths containing /etc or ..
   read_file:
     allow: true
     parameter_rules:
@@ -38,14 +19,18 @@ tools:
         deny_patterns:
           - "/etc/"
           - "\\\\.\\\\."
+          - "/root/"
 
-  # Example: block execute_command entirely
-  execute_command:
+  delete_record:
     allow: false
+    reason: "Destructive operation. Blocked by default."
 
-  # Example: queue database writes for human review
-  db_write:
+  execute_shell:
     allow: "review"
+    rate_limit: "3/minute"
+
+audit:
+  path: .baracuda/audit.db
 """
 
 
