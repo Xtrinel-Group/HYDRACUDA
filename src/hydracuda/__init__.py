@@ -1,6 +1,6 @@
 """HYDRACUDA - Runtime policy enforcement for AI tool calls."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from hydracuda.engine import PolicyEngine
 from hydracuda.policy import load_policy
