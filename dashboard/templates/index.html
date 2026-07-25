@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HYDRACUDA Dashboard</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0a; color:#e2e8f0; font-family:system-ui,sans-serif; padding:24px; max-width:1200px; margin:0 auto; }
+.header { display:flex; align-items:center; gap:16px; margin-bottom:24px; }
+.header img { height:32px; }
+h1 { font-size:22px; margin-bottom:4px; color:#009FFF; }
+.subtitle { color:#64748b; font-size:12px; }
+.cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+.card { background:#111; border:1px solid #1f2937; border-radius:8px; padding:16px; text-align:center; }
+.card .num { font-size:28px; font-weight:700; }
+.card .label { font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-top:4px; }
+.allow .num { color:#009FFF; }
+.deny .num { color:#ef4444; }
+.review .num { color:#f59e0b; }
+.section { background:#111; border:1px solid #1f2937; border-radius:8px; padding:16px; margin-bottom:16px; }
+.section h2 { font-size:13px; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+th { text-align:left; color:#64748b; padding:6px 8px; border-bottom:1px solid #1f2937; }
+td { padding:6px 8px; border-bottom:1px solid #111; }
+.action-allow { color:#10b981; }
+.action-deny { color:#ef4444; }
+.action-review { color:#f59e0b; }
+.filters { display:flex; gap:8px; margin-bottom:12px; }
+.filters input, .filters select { padding:6px 10px; background:#0a0a0a; border:1px solid #1f2937; border-radius:4px; color:#e2e8f0; font-size:12px; }
+.filters button { padding:6px 12px; background:#009FFF; border:none; border-radius:4px; color:#fff; font-size:12px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="header">
+  <img src="https://assets.xtrinel.com/hydracuda-full.svg" alt="HYDRACUDA">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="subtitle">Audit log visualization · Read-only</p>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card"><div class="num" id="total">—</div><div class="label">Total Decisions</div></div>
+  <div class="card allow"><div class="num" id="allow">—</div><div class="label">Allow</div></div>
+  <div class="card deny"><div class="num" id="deny">—</div><div class="label">Deny</div></div>
+  <div class="card review"><div class="num" id="review">—</div><div class="label">Review</div></div>
+</div>
+
+<div class="section">
+  <h2>Policy Hit Rates</h2>
+  <div id="tools"></div>
+</div>
+
+<div class="section">
+  <h2>Audit Log</h2>
+  <div class="filters">
+    <select id="filter-action"><option value="">All actions</option><option>allow</option><option>deny</option><option>review</option></select>
+    <input id="filter-tool" placeholder="Filter by tool...">
+    <button onclick="loadHistory()">Search</button>
+  </div>
+  <table>
+    <thead><tr><th>Time</th><th>Tool</th><th>Action</th><th>Reason</th></tr></thead>
+    <tbody id="log-body"></tbody>
+  </table>
+</div>
+
+<script>
+async function loadStats() {
+  const r = await fetch('/api/stats');
+  const d = await r.json();
+  if (d.error) { document.getElementById('total').textContent = 'No DB'; return; }
+  document.getElementById('total').textContent = d.total;
+  document.getElementById('allow').textContent = d.allow;
+  document.getElementById('deny').textContent = d.deny;
+  document.getElementById('review').textContent = d.review;
+  document.getElementById('tools').innerHTML = d.top_tools.map(t =>
+    `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span>${t.tool}</span><span style="color:#64748b">${t.count}</span></div>`
+  ).join('');
+}
+
+async function loadHistory() {
+  const action = document.getElementById('filter-action').value;
+  const tool = document.getElementById('filter-tool').value;
+  const params = new URLSearchParams();
+  if (action) params.set('action', action);
+  if (tool) params.set('tool', tool);
+  const r = await fetch('/api/history?' + params);
+  const rows = await r.json();
+  document.getElementById('log-body').innerHTML = rows.map(r =>
+    `<tr><td style="color:#64748b">${r.timestamp?.substring(11,19) || ''}</td><td>${r.tool}</td><td class="action-${r.action}">${r.action}</td><td style="color:#94a3b8;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.reason}</td></tr>`
+  ).join('');
+}
+
+loadStats();
+loadHistory();
+</script>
+</body>
+</html>
