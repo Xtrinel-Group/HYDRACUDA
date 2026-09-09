@@ -1,0 +1,31 @@
+# HYDRACUDA policy — version 1 (legacy format, still supported).
+#
+# This is the format shipped in v0.1.0-v0.2.0. It is kept here as the
+# reference input for the migration parity test in
+# tests/test_migration_parity.py, which asserts that this file and
+# examples/policy.yaml produce identical decisions.
+#
+# New policies should use version 2. See docs/policy-spec.md.
+
+version: 1
+mode: enforce
+audit_path: .hydracuda/audit.db
+
+tools:
+  read_file:
+    allow: true
+    parameter_rules:
+      path:
+        deny_patterns:
+          - "/etc/"
+          - "\\.\\."
+          - "/root/"
+
+  delete_record:
+    allow: false
+    reason: "Destructive operation. Blocked by default."
+
+  # `rate_limit` used to be accepted here and silently did nothing. It is now
+  # a load error; rate limiting belongs in the calling layer.
+  execute_shell:
+    allow: "review"

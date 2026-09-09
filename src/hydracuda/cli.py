@@ -27,10 +27,6 @@ tools:
 
   execute_shell:
     allow: "review"
-    rate_limit: "3/minute"
-
-audit:
-  path: .hydracuda/audit.db
 """
 
 

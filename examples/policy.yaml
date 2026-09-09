@@ -1,0 +1,49 @@
+# HYDRACUDA policy — version 2.
+#
+# Direct migration of examples/policy-v1-legacy.yaml. Rules are evaluated in
+# order and the first match wins, so the narrow deny rules sit above the broad
+# allow rule. See docs/policy-spec.md for the full specification.
+
+version: 2
+mode: enforce
+
+# Applied when no rule below matches. Defaults to deny so that adding a tool
+# without adding a rule fails closed.
+default_action: deny
+
+audit_path: .hydracuda/audit.db
+
+# What exists. Kept separate from what is permitted, and used by
+# `hydracuda plan` to walk the full declared surface.
+adapters:
+  - name: local
+    type: local_tools
+    resources:
+      - read_file
+      - delete_record
+      - execute_shell
+
+rules:
+  - name: block-sensitive-paths
+    resource: read_file
+    action: deny
+    reason: "read_file: path is outside the permitted surface"
+    where:
+      path:
+        matches:
+          - "/etc/"
+          - "\\.\\."
+          - "/root/"
+
+  - name: allow-file-reads
+    resource: read_file
+    action: allow
+
+  - name: block-destructive-deletes
+    resource: delete_record
+    action: deny
+    reason: "Destructive operation. Blocked by default."
+
+  - name: shell-requires-approval
+    resource: execute_shell
+    action: review

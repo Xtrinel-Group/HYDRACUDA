@@ -28,5 +28,18 @@ Issues = "https://github.com/Xtrinel-Group/HYDRACUDA/issues"
 [project.scripts]
 hydracuda = "hydracuda.cli:main"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.21",
+]
+dashboard = [
+    "flask>=3.0",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/hydracuda"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
