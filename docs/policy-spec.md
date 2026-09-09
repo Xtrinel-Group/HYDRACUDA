@@ -288,6 +288,37 @@ A field that is absent from the subject fails every operator except
 the request never supplied does not fire, and evaluation continues to the
 next rule.
 
+This is uniform and deliberate — it is what stops a `when` condition from being
+satisfied by a same-named request parameter — but it has a consequence that
+catches people out. A negative operator on a blocking rule reads as broader
+than it behaves:
+
+```yaml
+# Reads as "deny writes outside the workspace".
+# Behaves as "deny writes to a stated path outside the workspace".
+- resource: filesystem.write_file
+  action: deny
+  where:
+    path:
+      not_matches: ["^/workspace/"]
+```
+
+A request with no `path` at all does not match, so this rule does not stop it.
+Adding `present: true` alongside the negative operator documents the intent but
+changes nothing, because operators are ANDed and the rule still needs the field
+to be there. Cover the case with a second rule:
+
+```yaml
+- resource: filesystem.write_file
+  action: deny
+  where:
+    path:
+      absent: true
+```
+
+`hydracuda validate` reports the missing pairing as
+`negative-condition-fails-open`.
+
 Comparisons other than `matches` / `not_matches` use the YAML-parsed value,
 so types must agree: `equals: true` does not match the string `"true"`.
 
@@ -395,6 +426,60 @@ would change which file is addressed.
 Building an adapter from a policy file — which is what `validate` and `plan` do
 — declares the resource surface without handlers. Such an adapter can be
 planned against; it cannot execute.
+
+---
+
+## Introspection
+
+Two read-only commands. Neither executes a tool, writes an audit record, or
+needs the dashboard running.
+
+```
+hydracuda validate [policy.yaml] [--strict]
+hydracuda plan     [policy.yaml] [--reasons]
+```
+
+Both default to `hydracuda.yaml`. `validate` exits non-zero on an error, and on
+a warning too under `--strict`. `check` is a deprecated alias for `validate`.
+
+### `validate`
+
+Schema problems are already hard errors at load time, so everything `validate`
+reports is a policy that parses but does not mean what it appears to.
+
+| Code | Level | Meaning |
+|---|---|---|
+| `adapter-unbuildable` | error | An `adapters` entry names an unknown `type` or an unrecognized `config` key. |
+| `unpinned-when-field` | warning | A rule tests a `when` field absent from `pinned_context`. See [Trust model](#trust-model). |
+| `negative-condition-fails-open` | warning | A blocking rule uses `not_matches`/`not_equals`/`not_in` with no companion rule covering the field being absent. |
+| `unreachable-rule` | warning | An earlier rule matches these resources first, so this rule never fires. |
+| `conflicting-rules` | warning | Two rules cover the same resources under the same conditions and disagree. The earlier one wins. |
+| `duplicate-rule` | warning | Same resources, same conditions, same action as an earlier rule. |
+| `duplicate-rule-name` | warning | Two rules share a `name`, making an audit record ambiguous. |
+| `unmatched-rule-resource` | warning | A rule's resource pattern matches nothing any adapter declares. |
+| `shadow-mode` | warning | `mode: shadow` enforces nothing. |
+| `default-allow` | warning | `default_action: allow` fails open for anything no rule mentions. |
+| `no-rules` | warning | Every request falls through to `default_action`. |
+
+Unreachability is only reported when it is provable. A broad pattern above a
+narrow one is reported; two overlapping wildcard patterns are not, because a
+false accusation against a working policy is worse than a missed one.
+
+### `plan`
+
+Walks the declared resource surface — every resource an adapter declares, plus
+every non-wildcard rule resource — and prints the decision for each.
+
+```
+  ALLOW   read_file      allow-file-reads  [conditional: block-sensitive-paths]
+  DENY    delete_record  block-destructive-deletes
+  REVIEW  execute_shell  shell-requires-approval
+```
+
+Each resource is evaluated **with no parameters and no context**, which is all a
+policy file supplies on its own. Rules that could change the outcome for a real
+call are listed as `conditional` rather than guessed at, so the output is never
+mistaken for a claim about every possible request.
 
 ---
 

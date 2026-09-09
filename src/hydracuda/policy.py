@@ -198,12 +198,15 @@ def rules_from_tools(tools: dict[str, ToolPolicy]) -> list[Rule]:
             continue
 
         for param_name, param_rules in (tool_policy.parameter_rules or {}).items():
-            for pattern in param_rules.get("deny_patterns", []):
+            # The index keeps generated names unique. Without it a tool with
+            # several deny patterns produced several identically named rules,
+            # which made an audit record ambiguous about which pattern fired.
+            for position, pattern in enumerate(param_rules.get("deny_patterns", [])):
                 rules.append(
                     Rule(
                         resource=tool_name,
                         action="deny",
-                        name=f"legacy:{tool_name}:{param_name}:deny_pattern",
+                        name=f"legacy:{tool_name}:{param_name}:deny_pattern[{position}]",
                         reason=(
                             f"{tool_name}: parameter '{param_name}' "
                             f"matched deny pattern '{pattern}'"

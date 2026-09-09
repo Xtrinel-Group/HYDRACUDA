@@ -56,6 +56,21 @@ rules:
       mode:
         not_equals: read
 
+  # An absent field satisfies no value operator, so the rule above does not fire
+  # on a request that omits `mode` entirely. Negative conditions need this
+  # companion rule to be airtight; `hydracuda validate` reports the pairing when
+  # it is missing.
+  - name: untrusted-agents-must-state-a-mode
+    resource: "**"
+    action: deny
+    reason: "untrusted agents must state the mode of the action"
+    when:
+      trust:
+        equals: untrusted
+    where:
+      mode:
+        absent: true
+
   - name: no-writes-outside-workspace
     resource: filesystem.write_*
     action: deny
@@ -63,6 +78,14 @@ rules:
     where:
       path:
         not_matches: ["^/workspace/"]
+
+  - name: writes-must-state-a-path
+    resource: filesystem.write_*
+    action: deny
+    reason: "a write must state the path it targets"
+    where:
+      path:
+        absent: true
 
   - name: deletes-need-approval
     resource: filesystem.delete_file

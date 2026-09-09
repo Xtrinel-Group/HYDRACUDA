@@ -158,3 +158,53 @@ def resource_matches(pattern: str, resource: str) -> bool:
     if pattern == resource:
         return True
     return _match_segments(pattern.split("."), resource.split("."))
+
+
+def pattern_subsumes(outer: str, inner: str) -> bool:
+    """True when everything `inner` matches, `outer` also matches.
+
+    Deliberately conservative: it returns True only when subsumption is
+    provable, and False when it merely cannot be ruled out. `validate` uses
+    this to report a rule as unreachable, and a false positive there would
+    accuse a working policy of being broken.
+    """
+    if outer == inner:
+        return True
+    return _subsumes_segments(outer.split("."), inner.split("."))
+
+
+def _subsumes_segments(outer: list[str], inner: list[str]) -> bool:
+    if not outer:
+        return not inner
+
+    if outer[0] == "**":
+        if len(outer) == 1:
+            return True
+        return any(
+            _subsumes_segments(outer[1:], inner[i:]) for i in range(len(inner) + 1)
+        )
+
+    if not inner:
+        return False
+
+    if not _segment_subsumes(outer[0], inner[0]):
+        return False
+    return _subsumes_segments(outer[1:], inner[1:])
+
+
+def _segment_subsumes(outer: str, inner: str) -> bool:
+    """True when a single pattern segment covers another."""
+    if outer == inner:
+        return True
+    # `**` in the inner pattern spans a variable number of segments, which a
+    # single outer segment cannot cover.
+    if inner == "**":
+        return False
+    if outer == "*":
+        return True
+    # An inner segment carrying its own wildcards describes a set. Proving that
+    # one fnmatch pattern covers another is more than this needs to do, so it
+    # is treated as not provable.
+    if any(c in inner for c in "*?["):
+        return False
+    return fnmatchcase(inner, outer)
