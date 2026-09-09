@@ -10,6 +10,7 @@ Two separate concerns:
 """
 
 import ast
+import re
 import sqlite3
 import subprocess
 import sys
@@ -391,11 +392,67 @@ def test_a_tool_name_is_returned_verbatim_by_the_api(client, audit_db):
     assert rows[0]["tool"] == "<img src=x onerror=alert(1)>"
 
 
-def test_the_page_escapes_every_audit_value_it_renders():
-    """A tool name is chosen by the agent being policed, so it is untrusted
-    input rendered into this page. Unescaped, it was script execution."""
+#: Interpolations that are safe for a reason other than `esc()`, each reviewed
+#: individually. Anything not here and not `esc(...)` fails the test below.
+REVIEWED_INTERPOLATIONS = {
+    # Restricted to the three actions the stylesheet knows, so a value from the
+    # database cannot become an attribute or a class of its own choosing.
+    "actionClass(r.action)",
+    # The parameter inside actionClass, reachable only past that allowlist.
+    "action",
+    # A local built above, already escaped at construction.
+    "enforced",
+    # Integers from COUNT(*), and the sink is textContent.
+    "d.total",
+    "d.unenforced",
+}
+
+#: Sinks that interpret markup. textContent does not, so it is not listed.
+HTML_SINKS = ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write")
+
+
+def test_every_interpolation_in_the_page_is_escaped_or_reviewed():
+    """The guard has to be structural, not a list of the fields caught so far.
+
+    A tool name is chosen by the agent being policed and a reason string quotes
+    it back, so both are untrusted input rendered into this page — unescaped,
+    that was script execution. `params` is the raw agent-supplied arguments and
+    is deliberately not rendered; this fails if anyone adds it to a row without
+    escaping.
+    """
     source = TEMPLATE.read_text()
     assert "function esc(" in source
-    for field in ("r.tool", "r.reason", "r.action", "t.tool"):
-        assert f"${{{field}}}" not in source, f"{field} interpolated unescaped"
-        assert f"esc({field})" in source
+
+    unescaped = [
+        expression
+        for expression in re.findall(r"\$\{([^}]*)\}", source)
+        if not expression.startswith("esc(")
+        and expression.strip() not in REVIEWED_INTERPOLATIONS
+    ]
+    assert unescaped == [], f"unescaped interpolation(s): {unescaped}"
+
+
+def test_the_page_uses_no_markup_sink_beyond_the_two_audited_ones():
+    """Two innerHTML assignments are audited above. A third, or any other sink,
+    is new attack surface that has not been reviewed."""
+    source = TEMPLATE.read_text()
+    lines = [
+        f"{number}: {line.strip()}"
+        for number, line in enumerate(source.splitlines(), start=1)
+        # Skip the comment explaining the fix, which names the sink.
+        if not line.strip().startswith("//")
+        and any(sink in line for sink in HTML_SINKS)
+    ]
+    assert len(lines) == 2, lines
+    assert all("innerHTML" in line for line in lines)
+
+
+def test_the_api_does_not_expose_fields_the_page_would_render_unescaped():
+    """`params` and `id` are returned but not rendered.
+
+    Recorded so that the escaping audit above has a stated scope: these are the
+    two fields in the payload that no row in the table reads.
+    """
+    source = TEMPLATE.read_text()
+    assert "r.params" not in source
+    assert "${r.id}" not in source

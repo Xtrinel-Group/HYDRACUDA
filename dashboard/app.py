@@ -162,6 +162,12 @@ def history():
     with open_db() as conn:
         rows = query(conn, sql, values) if conn is not None else None
 
+    # Every text field below is untrusted. `tool` is chosen by the agent being
+    # policed, `reason` quotes it back, and `params` is the raw arguments that
+    # agent supplied. Any consumer that renders these has to escape them —
+    # unescaped interpolation into innerHTML was a stored XSS in v0.2.0. The
+    # bundled page renders all of it escaped and does not render `params` at
+    # all; `params` stays in the payload because it was in the v0.2.0 response.
     return jsonify(
         [
             {

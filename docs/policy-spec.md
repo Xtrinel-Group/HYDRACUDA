@@ -510,6 +510,20 @@ read as calls that were stopped. The dashboard shows enforcement per row and
 banners the total, because "40 denies" and "40 calls blocked" are not the same
 claim.
 
+### Audit records are untrusted input
+
+Anything you build on the audit log has to treat its text fields as hostile.
+`tool` is whatever name the agent asked for, `reason` quotes that name back, and
+`params` is the raw arguments the agent supplied. A blocked call is still a
+recorded call, so refusing an action does not keep its payload out of the log.
+
+This is not hypothetical: interpolating those fields into `innerHTML` was a
+stored cross-site scripting bug in the bundled dashboard up to and including
+v0.2.0. One tool call named `<img src=x onerror=...>` gave the attacker two
+injection points, because the engine's own reason string embedded the name. The
+bundled page now escapes every value it renders, and the test suite fails on any
+unescaped interpolation rather than on a list of the fields already fixed.
+
 ---
 
 ## Version 1 compatibility
