@@ -483,6 +483,35 @@ mistaken for a claim about every possible request.
 
 ---
 
+## Dashboard
+
+The dashboard is optional and downstream. HYDRACUDA runs fully headless: the
+core runtime and both CLI commands behave identically whether it is installed,
+running, or absent.
+
+```
+pip install hydracuda[dashboard]
+HYDRACUDA_AUDIT_DB=.hydracuda/audit.db python -m dashboard.app
+```
+
+It holds no policy state. It never imports `hydracuda`, never reads a policy
+file, and cannot influence a decision — its only input is the audit database
+named by `HYDRACUDA_AUDIT_DB`. The dependency runs one way, and the test suite
+asserts that in both directions rather than leaving it to convention.
+
+Its SQLite connections are opened `mode=ro`, so read-only is enforced by the
+driver. That matters because the audit log has a live writer: a read-write
+connection can create journal files beside it and take locks that block the
+proxy.
+
+Rows record whether a decision was **enforced**. Under `mode: shadow` a denied
+call is logged and then executed anyway, so a decision count on its own would
+read as calls that were stopped. The dashboard shows enforcement per row and
+banners the total, because "40 denies" and "40 calls blocked" are not the same
+claim.
+
+---
+
 ## Version 1 compatibility
 
 A `version: 1` file is translated into version 2 rules at load time and then

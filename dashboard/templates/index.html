@@ -32,6 +32,8 @@ td { padding:6px 8px; border-bottom:1px solid #111; }
 .filters { display:flex; gap:8px; margin-bottom:12px; }
 .filters input, .filters select { padding:6px 10px; background:#0a0a0a; border:1px solid #1f2937; border-radius:4px; color:#e2e8f0; font-size:12px; }
 .filters button { padding:6px 12px; background:#009FFF; border:none; border-radius:4px; color:#fff; font-size:12px; cursor:pointer; }
+.banner { background:#1c1400; border:1px solid #f59e0b; color:#fbbf24; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:12px; }
+.shadow { color:#f59e0b; }
 </style>
 </head>
 <body>
@@ -43,6 +45,8 @@ td { padding:6px 8px; border-bottom:1px solid #111; }
   </div>
 </div>
 
+<div class="banner" id="shadow-banner" hidden></div>
+
 <div class="cards">
   <div class="card"><div class="num" id="total">—</div><div class="label">Total Decisions</div></div>
   <div class="card allow"><div class="num" id="allow">—</div><div class="label">Allow</div></div>
@@ -51,7 +55,7 @@ td { padding:6px 8px; border-bottom:1px solid #111; }
 </div>
 
 <div class="section">
-  <h2>Policy Hit Rates</h2>
+  <h2>Top Tools</h2>
   <div id="tools"></div>
 </div>
 
@@ -63,22 +67,52 @@ td { padding:6px 8px; border-bottom:1px solid #111; }
     <button onclick="loadHistory()">Search</button>
   </div>
   <table>
-    <thead><tr><th>Time</th><th>Tool</th><th>Action</th><th>Reason</th></tr></thead>
+    <thead><tr><th>Time</th><th>Tool</th><th>Action</th><th>Enforced</th><th>Reason</th></tr></thead>
     <tbody id="log-body"></tbody>
   </table>
 </div>
 
 <script>
+// Every value below comes out of the audit log, and a tool name is chosen by
+// the agent being policed. Interpolating it into innerHTML unescaped let a
+// call named `<img src=x onerror=...>` run script in this page.
+function esc(value) {
+  const map = {'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'};
+  return String(value ?? '').replace(/[&<>"']/g, c => map[c]);
+}
+
+// The class name is built from a value in the database, so it is restricted to
+// the actions the stylesheet knows rather than escaped and hoped for.
+const ACTIONS = ['allow', 'deny', 'review'];
+function actionClass(action) {
+  return ACTIONS.includes(action) ? `action-${action}` : '';
+}
+
 async function loadStats() {
   const r = await fetch('/api/stats');
   const d = await r.json();
-  if (d.error) { document.getElementById('total').textContent = 'No DB'; return; }
+  const banner = document.getElementById('shadow-banner');
+  if (d.error) {
+    document.getElementById('total').textContent = 'No DB';
+    banner.hidden = true;
+    return;
+  }
   document.getElementById('total').textContent = d.total;
   document.getElementById('allow').textContent = d.allow;
   document.getElementById('deny').textContent = d.deny;
   document.getElementById('review').textContent = d.review;
+
+  // Without this the counters read as calls that were stopped.
+  if (d.unenforced > 0) {
+    banner.textContent = `${d.unenforced} of ${d.total} decisions were logged but `
+      + `not enforced — the policy was in shadow mode and those calls ran anyway.`;
+    banner.hidden = false;
+  } else {
+    banner.hidden = true;
+  }
+
   document.getElementById('tools').innerHTML = d.top_tools.map(t =>
-    `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span>${t.tool}</span><span style="color:#64748b">${t.count}</span></div>`
+    `<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px"><span>${esc(t.tool)}</span><span style="color:#64748b">${esc(t.count)}</span></div>`
   ).join('');
 }
 
@@ -90,9 +124,16 @@ async function loadHistory() {
   if (tool) params.set('tool', tool);
   const r = await fetch('/api/history?' + params);
   const rows = await r.json();
-  document.getElementById('log-body').innerHTML = rows.map(r =>
-    `<tr><td style="color:#64748b">${r.timestamp?.substring(11,19) || ''}</td><td>${r.tool}</td><td class="action-${r.action}">${r.action}</td><td style="color:#94a3b8;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.reason}</td></tr>`
-  ).join('');
+  document.getElementById('log-body').innerHTML = rows.map(r => {
+    const enforced = r.enforced
+      ? 'yes'
+      : `<span class="shadow">no · ${esc(r.mode || 'shadow')}</span>`;
+    return `<tr><td style="color:#64748b">${esc(r.timestamp?.substring(11,19) || '')}</td>`
+      + `<td>${esc(r.tool)}</td>`
+      + `<td class="${actionClass(r.action)}">${esc(r.action)}</td>`
+      + `<td>${enforced}</td>`
+      + `<td style="color:#94a3b8;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.reason)}</td></tr>`;
+  }).join('');
 }
 
 loadStats();

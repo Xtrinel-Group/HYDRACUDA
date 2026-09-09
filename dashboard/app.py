@@ -2,11 +2,23 @@
 
 Run: python -m dashboard.app
 Opens at http://localhost:8321
+
+The dashboard is a consumer of the audit log and nothing else. It holds no
+policy state, never imports `hydracuda`, and cannot influence a decision. The
+core runtime and the CLI work identically whether it is running or not, and
+Flask is an optional extra rather than a dependency.
+
+"Read-only" is enforced by the driver, not promised in prose: connections are
+opened `mode=ro`. That matters beyond hygiene — the audit log is written by a
+live proxy, and a read-write connection can create journal files beside it and
+take locks that block the writer.
 """
 
-import json
+import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import Flask, jsonify, render_template, request
 
@@ -14,17 +26,64 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 
 DEFAULT_DB = ".hydracuda/audit.db"
 
+#: Cap on `?limit=`. A dashboard page cannot usefully render more, and an
+#: unbounded limit turns one request into an out-of-memory fetch.
+MAX_LIMIT = 1000
+
+DEFAULT_LIMIT = 100
+
 
 def get_db_path() -> str:
-    import os
     return os.environ.get("HYDRACUDA_AUDIT_DB", DEFAULT_DB)
 
 
-def get_connection():
-    db_path = get_db_path()
-    if not Path(db_path).exists():
+@contextmanager
+def open_db():
+    """Yield a read-only connection, or None when there is no audit log yet.
+
+    Always closes. The previous version closed only on the success path, so any
+    query error leaked a connection for the lifetime of the process.
+    """
+    path = Path(get_db_path())
+    if not path.exists():
+        yield None
+        return
+
+    conn = sqlite3.connect(f"file:{quote(str(path.resolve()))}?mode=ro", uri=True)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def query(conn, sql: str, params=()) -> list | None:
+    """Run a read query, returning None if the audit table does not exist.
+
+    A database file can exist before any decision has been recorded — the proxy
+    creates the table on its first write. That used to surface as a 500.
+    """
+    try:
+        return conn.execute(sql, params).fetchall()
+    except sqlite3.OperationalError:
         return None
-    return sqlite3.connect(db_path)
+
+
+def query_arg(name: str, default: int, maximum: int | None = None) -> int:
+    """Read an integer query argument, ignoring anything unparseable.
+
+    `?limit=abc` raised ValueError and returned a 500.
+    """
+    try:
+        value = int(request.args.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    if value < 0:
+        return default
+    return min(value, maximum) if maximum is not None else value
+
+
+def no_audit_log(reason: str):
+    return jsonify({"error": reason, "path": get_db_path()})
 
 
 @app.route("/")
@@ -34,79 +93,111 @@ def index():
 
 @app.route("/api/stats")
 def stats():
-    conn = get_connection()
-    if not conn:
-        return jsonify({"error": "Audit database not found", "path": get_db_path()})
+    with open_db() as conn:
+        if conn is None:
+            return no_audit_log("Audit database not found")
 
-    cur = conn.cursor()
-    cur.execute("SELECT action, COUNT(*) FROM audit_log GROUP BY action")
-    action_counts = dict(cur.fetchall())
+        # COALESCE, because rows written before the `enforced` column existed
+        # have NULL there, and every decision back then was enforced.
+        rows = query(
+            conn,
+            "SELECT action, COALESCE(enforced, 1), COUNT(*) FROM audit_log "
+            "GROUP BY action, COALESCE(enforced, 1)",
+        )
+        if rows is None:
+            return no_audit_log("Audit database has no decisions yet")
 
-    cur.execute("SELECT COUNT(*) FROM audit_log")
-    total = cur.fetchone()[0]
+        top_tools = query(
+            conn,
+            "SELECT tool, COUNT(*) AS n FROM audit_log "
+            "GROUP BY tool ORDER BY n DESC LIMIT 10",
+        )
 
-    cur.execute("SELECT tool, COUNT(*) FROM audit_log GROUP BY tool ORDER BY COUNT(*) DESC LIMIT 10")
-    top_tools = [{"tool": r[0], "count": r[1]} for r in cur.fetchall()]
+    counts = {"allow": 0, "deny": 0, "review": 0}
+    unenforced = 0
+    for action, enforced, count in rows:
+        counts[action] = counts.get(action, 0) + count
+        if not enforced:
+            unenforced += count
 
-    conn.close()
-    return jsonify({
-        "total": total,
-        "allow": action_counts.get("allow", 0),
-        "deny": action_counts.get("deny", 0),
-        "review": action_counts.get("review", 0),
-        "top_tools": top_tools,
-    })
+    return jsonify(
+        {
+            "total": sum(counts.values()),
+            "allow": counts["allow"],
+            "deny": counts["deny"],
+            "review": counts["review"],
+            # Decisions that were computed and logged but not acted on, because
+            # the policy was in shadow mode. Without this the counters above
+            # read as calls that were stopped.
+            "unenforced": unenforced,
+            "top_tools": [{"tool": tool, "count": n} for tool, n in top_tools or []],
+        }
+    )
 
 
 @app.route("/api/history")
 def history():
-    conn = get_connection()
-    if not conn:
-        return jsonify([])
-
-    cur = conn.cursor()
-    limit = int(request.args.get("limit", 100))
-    offset = int(request.args.get("offset", 0))
+    limit = query_arg("limit", DEFAULT_LIMIT, MAX_LIMIT)
+    offset = query_arg("offset", 0)
     action_filter = request.args.get("action")
     tool_filter = request.args.get("tool")
 
-    query = "SELECT id, timestamp, tool, action, reason, params FROM audit_log"
+    sql = (
+        "SELECT id, timestamp, tool, action, reason, params, mode, "
+        "COALESCE(enforced, 1) FROM audit_log"
+    )
     conditions = []
-    params = []
+    values: list = []
     if action_filter:
         conditions.append("action = ?")
-        params.append(action_filter)
+        values.append(action_filter)
     if tool_filter:
         conditions.append("tool LIKE ?")
-        params.append(f"%{tool_filter}%")
+        values.append(f"%{tool_filter}%")
     if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY id DESC LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
+    values.extend([limit, offset])
 
-    cur.execute(query, params)
-    rows = [
-        {"id": r[0], "timestamp": r[1], "tool": r[2], "action": r[3], "reason": r[4], "params": r[5]}
-        for r in cur.fetchall()
-    ]
-    conn.close()
-    return jsonify(rows)
+    with open_db() as conn:
+        rows = query(conn, sql, values) if conn is not None else None
+
+    return jsonify(
+        [
+            {
+                "id": row[0],
+                "timestamp": row[1],
+                "tool": row[2],
+                "action": row[3],
+                "reason": row[4],
+                "params": row[5],
+                "mode": row[6],
+                "enforced": bool(row[7]),
+            }
+            for row in rows or []
+        ]
+    )
 
 
 @app.route("/api/timeline")
 def timeline():
-    conn = get_connection()
-    if not conn:
-        return jsonify([])
+    with open_db() as conn:
+        rows = (
+            query(
+                conn,
+                "SELECT substr(timestamp, 1, 16) AS minute, action, COUNT(*) "
+                "FROM audit_log GROUP BY minute, action ORDER BY minute",
+            )
+            if conn is not None
+            else None
+        )
 
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT substr(timestamp, 1, 16) as minute, action, COUNT(*)
-        FROM audit_log GROUP BY minute, action ORDER BY minute
-    """)
-    rows = [{"minute": r[0], "action": r[1], "count": r[2]} for r in cur.fetchall()]
-    conn.close()
-    return jsonify(rows)
+    return jsonify(
+        [
+            {"minute": row[0], "action": row[1], "count": row[2]}
+            for row in rows or []
+        ]
+    )
 
 
 if __name__ == "__main__":
