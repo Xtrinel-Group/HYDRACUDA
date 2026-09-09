@@ -25,7 +25,15 @@ adapters:
       - filesystem.read_file
       - filesystem.write_file
       - filesystem.delete_file
+    config:
+      # Every declared path parameter is resolved and required to land inside
+      # this root. The `no-writes-outside-workspace` rule below expresses the
+      # same intent as a pattern, which catches fewer spellings — keep both.
+      root: /workspace
 
+  # No GitHub adapter type ships yet. Declaring these under `local_tools` still
+  # gives `plan` the surface to walk; the handlers live in the integrator's
+  # process, and none of these resources carry a path parameter.
   - name: gh
     type: local_tools
     resources:

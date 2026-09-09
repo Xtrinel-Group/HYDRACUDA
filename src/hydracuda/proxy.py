@@ -14,6 +14,8 @@ from pathlib import Path
 
 import aiosqlite
 
+from hydracuda.adapters import Adapter, UndeclaredResource
+from hydracuda.canonical import CanonicalizationError
 from hydracuda.engine import Decision, PolicyEngine
 
 _SCHEMA = """CREATE TABLE IF NOT EXISTS audit_log (
@@ -25,7 +27,8 @@ _SCHEMA = """CREATE TABLE IF NOT EXISTS audit_log (
     params TEXT,
     rule TEXT,
     mode TEXT,
-    enforced INTEGER
+    enforced INTEGER,
+    normalization TEXT
 )"""
 
 #: Columns added after v0.2.0. Existing audit databases are migrated in place
@@ -34,6 +37,7 @@ _ADDED_COLUMNS = {
     "rule": "TEXT",
     "mode": "TEXT",
     "enforced": "INTEGER",
+    "normalization": "TEXT",
 }
 
 
@@ -76,10 +80,12 @@ class ToolCallProxy:
         engine: PolicyEngine,
         audit_path: str | None = None,
         pinned_context: dict | None = None,
+        adapter: Adapter | None = None,
     ):
         self.engine = engine
         self.audit_path = audit_path or engine.policy.audit_path
         self.pinned_context = dict(pinned_context or {})
+        self.adapter = adapter
 
         required = set(engine.policy.pinned_context)
         missing = sorted(required - set(self.pinned_context))
@@ -114,27 +120,82 @@ class ToolCallProxy:
 
         return {**context, **self.pinned_context}
 
+    def _refusal(
+        self, tool_name: str, params: dict, context: dict, reason: str, rule: str
+    ) -> Decision:
+        """A denial decided at the boundary rather than by a policy rule.
+
+        Recorded like any other decision so the audit log shows refusals, and
+        enforced regardless of `mode` — shadow mode trials a policy, it does
+        not disable the adapter's own preconditions.
+        """
+        return Decision(
+            action="deny",
+            reason=reason,
+            tool=tool_name,
+            params=params,
+            rule=rule,
+            mode=self.engine.policy.mode,
+            enforced=True,
+            context=context,
+        )
+
     async def call(
         self,
         tool_name: str,
         params: dict,
-        handler,
+        handler=None,
         context: dict | None = None,
     ) -> dict:
-        """Evaluate, log, and execute or block a tool call.
+        """Evaluate, log, and optionally execute a tool call.
 
         `params` is untrusted: it is whatever the model asked for, and is what
         `where` conditions test. `context` is trusted: it must be supplied by
         the integrator, never forwarded from model output, and is what `when`
         conditions test.
 
+        When an adapter is configured, the request is canonicalized before
+        evaluation and the canonical parameters are the ones handed to the
+        handler. Evaluating one value and executing another would not be a
+        check at all.
+
         Under `mode: shadow` the decision is still computed and logged, but the
         call executes regardless — that is what makes shadow mode useful for
         trialling a policy against live traffic.
         """
         resolved_context = self._resolve_context(params, context)
+        notes: list[str] = []
+        effective_params = params
 
-        decision = self.engine.evaluate(tool_name, params, resolved_context)
+        if self.adapter is not None:
+            # An undeclared resource is refused before any rule is consulted,
+            # so a broad `resource: "**"` allow rule cannot reach something no
+            # adapter exposes.
+            try:
+                normalized = self.adapter.normalize(tool_name, params)
+            except UndeclaredResource as e:
+                decision = self._refusal(
+                    tool_name, params, resolved_context, str(e), "adapter:undeclared"
+                )
+                await self._write_audit(decision)
+                raise PermissionError(decision.reason) from e
+            except CanonicalizationError as e:
+                decision = self._refusal(
+                    tool_name,
+                    params,
+                    resolved_context,
+                    f"{tool_name}: {e}",
+                    "adapter:canonicalization",
+                )
+                await self._write_audit(decision)
+                raise PermissionError(decision.reason) from e
+
+            tool_name = normalized.resource
+            effective_params = normalized.params
+            notes = normalized.notes
+
+        decision = self.engine.evaluate(tool_name, effective_params, resolved_context)
+        decision.notes = notes
         await self._write_audit(decision)
 
         if decision.blocked:
@@ -142,7 +203,14 @@ class ToolCallProxy:
                 raise PermissionError(decision.reason)
             raise ReviewRequired(decision)
 
-        return await handler(tool_name, params)
+        if handler is not None:
+            return await handler(tool_name, effective_params)
+        if self.adapter is not None:
+            return await self.adapter.execute(tool_name, effective_params)
+        raise TypeError(
+            "ToolCallProxy.call() needs a handler, or a ToolCallProxy built "
+            "with adapter=..."
+        )
 
     async def _write_audit(self, decision: Decision) -> None:
         """Append a decision to the SQLite audit log."""
@@ -155,8 +223,8 @@ class ToolCallProxy:
             await self._migrate(db)
             await db.execute(
                 "INSERT INTO audit_log (timestamp, tool, action, reason, params, "
-                "rule, mode, enforced) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "rule, mode, enforced, normalization) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     datetime.now(timezone.utc).isoformat(),
                     decision.tool,
@@ -166,6 +234,7 @@ class ToolCallProxy:
                     decision.rule,
                     decision.mode,
                     int(decision.enforced),
+                    json.dumps(decision.notes) if decision.notes else None,
                 ),
             )
             await db.commit()

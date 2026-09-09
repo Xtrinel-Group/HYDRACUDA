@@ -22,6 +22,12 @@ adapters:
       - read_file
       - delete_record
       - execute_shell
+    config:
+      # Confines every declared path parameter. This is what actually stops
+      # traversal: a path resolving outside the root is refused regardless of
+      # how it was spelled, encoded, or symlinked. The deny rule below is
+      # defence in depth on top of it, not the control itself.
+      root: ./workspace
 
 rules:
   - name: block-sensitive-paths

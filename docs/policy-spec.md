@@ -218,11 +218,25 @@ Stated plainly, because these are the ways a deployment can still be wrong:
   `ToolCallProxy`. Code calling the engine directly — including `plan` and
   `test`, which are read-only by design — takes on the boundary itself.
 
-- **Parameters are matched literally, not normalized.** Conditions test the
-  parameter value as given. A `deny` on `\.\.` does not catch `%2e%2e`, and a
-  deny on `/etc/` does not catch a symlink pointing there. Decode, resolve, and
-  canonicalize in the adapter before the value reaches the engine; a regex is
-  not a path parser.
+- **The engine matches parameters literally.** Conditions test the value as the
+  engine received it. A `deny` on `\.\.` does not catch `%2e%2e`, and a deny on
+  `/etc/` does not catch a symlink pointing there. Closing that gap is the
+  adapter's job, and `local_tools` does it: declared `path_parameters` are
+  canonicalized and confined to `root` before evaluation, and the canonical
+  value is what executes. Deny patterns are then defence in depth on top of
+  confinement, not the control itself. See
+  [Normalization](#normalization-and-canonicalization).
+
+- **An adapter that declares no `path_parameters` canonicalizes nothing.** The
+  omission is silent by construction — HYDRACUDA cannot know which of your
+  parameters is a path. A custom adapter that skips `normalize()` gets literal
+  matching and nothing more.
+
+- **Canonicalization is a check, not a lock.** The path is resolved, confined,
+  and then handed to the handler. Anything that changes the filesystem between
+  those two moments — a symlink swapped in after the check — is outside what a
+  decision engine can see. Narrow `root` rather than relying on the resolve
+  step to survive a racing writer.
 
 - **The agent picks which resource to request.** It cannot invent a resource,
   but it will find the most permissive one your rules allow. A broad
@@ -304,6 +318,83 @@ adapters:
 `hydracuda plan` walks the declared resource surface and reports the decision
 for each entry, which is what makes an adapter's `resources` list worth
 maintaining.
+
+A resource no adapter declares is refused at the boundary before any rule is
+consulted, with rule `adapter:undeclared` in the audit log. This is not a policy
+denial — the resource does not exist — so a broad `resource: "**"` allow rule
+cannot reach it.
+
+### The interface
+
+An adapter is a subclass of `hydracuda.Adapter` implementing two members and
+optionally overriding two more:
+
+| Member | Required | Purpose |
+|---|---|---|
+| `name` | yes | Instance name, used in diagnostics and audit records. |
+| `resource_specs()` | yes | The `ResourceSpec` list this adapter exposes. |
+| `normalize(resource, params)` | no | Canonicalize a request before evaluation. Identity by default. |
+| `execute(resource, params)` | no | Perform the action. Only reached once policy allowed it. |
+
+A `ResourceSpec` carries `name`, `description`, `parameters`, and
+`path_parameters`. The last of these is security-relevant: it names the
+parameters holding filesystem paths, and naming them is what causes them to be
+canonicalized.
+
+### Normalization and canonicalization
+
+`normalize()` runs **before** evaluation, and its output is what both the engine
+and the handler see. Two properties follow, and both are load-bearing:
+
+- **The canonical value is the executed value.** Checking one string while
+  passing a different one to the handler would not be a check at all.
+- **Confinement beats blocklisting.** A path resolved with `realpath` and then
+  required to sit under a root cannot escape via `..`, via a symlink, or via any
+  encoding of either, because safety is decided by where the path lands rather
+  than by what it looks like.
+
+`normalize()` raises `CanonicalizationError` for input it cannot canonicalize
+safely. The proxy treats that as a denial: audited under rule
+`adapter:canonicalization`, then raised as `PermissionError`. It is enforced
+even under `mode: shadow` — shadow mode trials a *policy*, and a request whose
+target is unknown has no verdict to shadow.
+
+### `local_tools`
+
+The built-in adapter type. Exposes local Python callables under declared
+resource names.
+
+| Config key | Default | Meaning |
+|---|---|---|
+| `root` | none | Confines every declared path parameter. A value resolving outside it is refused. |
+| `reject_encoded_paths` | `true` | Refuse percent-encoded path input outright. |
+| `resolve_symlinks` | `true` | Resolve symlinks before the confinement check. |
+
+```yaml
+adapters:
+  - name: fs
+    type: local_tools
+    resources: [read_file, write_file]
+    config:
+      root: /workspace
+```
+
+Set `root` whenever the tools touch the filesystem. Without it, `..` and
+symlinks are still resolved, but nothing bounds where the result may land.
+
+`reject_encoded_paths: true` refuses rather than decodes, because decoding would
+silently rewrite the caller's request into a different one. Setting it to
+`false` leaves the characters literal — `%2e%2e%2f` addresses a file with that
+name — and relies on `root` for safety.
+
+Unicode is handled the same way: NFC folding is applied, because both spellings
+resolve to the same file, but NFKC compatibility characters (a fullwidth
+solidus, say) are recorded in the audit note and **not** folded, since folding
+would change which file is addressed.
+
+Building an adapter from a policy file — which is what `validate` and `plan` do
+— declares the resource surface without handlers. Such an adapter can be
+planned against; it cannot execute.
 
 ---
 

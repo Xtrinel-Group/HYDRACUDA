@@ -28,6 +28,10 @@ class Decision:
     mode: str = "enforce"
     enforced: bool = True
     context: dict = field(default_factory=dict)
+    #: How the adapter canonicalized the request before evaluation. Set by the
+    #: proxy, not the engine, and recorded in the audit log so a decision can
+    #: be reproduced from the params that were actually evaluated.
+    notes: list[str] = field(default_factory=list)
 
     @property
     def resource(self) -> str:
