@@ -24,10 +24,19 @@ The goal is simple: prevent tool-call abuse and out-of-scope actions while keepi
 - **Three decisions: allow, deny, review**  
   - `allow` forwards the call to your handler  
   - `deny` blocks the call with a clear reason  
-  - `review` is reserved for high-risk actions that will require human approval in a later version
+  - `review` blocks the call and raises `ReviewRequired`, carrying the decision, for you to route into an approval workflow
+
+- **Strict validation, no silent no-ops**  
+  An unrecognized key is a load error, not a warning. A typo'd rule used to fail open — you believed a rule was active when it was not.
+
+- **Read-only introspection**  
+  `hydracuda validate` reports rules that do not mean what they appear to. `hydracuda plan` prints the decision for every declared resource without executing anything.
 
 - **Local audit logging**  
-  Every decision is written to a SQLite audit log on disk. No telemetry, no external service, no cloud dependency.
+  Every decision is written to a SQLite audit log on disk. No telemetry, no external service, no cloud dependency. Policy evaluation is local and does not phone home.
+
+- **Deterministic engine**  
+  Decisions are a pure function of the policy, the request, and the context. No model call, no clock read, no network in the decision loop — which is what makes `plan` reproducible.
 
 - **Two primary use cases**
   - **Production guardrail** for AI-integrated applications
@@ -43,12 +52,18 @@ HYDRACUDA targets Python 3.10 and above.
 pip install hydracuda
 ```
 
+The optional dashboard needs Flask:
+
+```bash
+pip install "hydracuda[dashboard]"
+```
+
 To work on the project locally:
 
 ```bash
 git clone https://github.com/Xtrinel-Group/HYDRACUDA.git
 cd HYDRACUDA
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ---
@@ -61,15 +76,16 @@ From a new or existing project directory:
 hydracuda init
 ```
 
-This writes a starter `hydracuda.yaml` with commented examples.
+This writes a starter `hydracuda.yaml`.
 
-Validate the policy:
+Check it, then see what it decides:
 
 ```bash
-hydracuda check hydracuda.yaml
+hydracuda validate          # schema errors, conflicting and unreachable rules
+hydracuda plan              # ALLOW/DENY/REVIEW for every declared resource
 ```
 
-If validation passes, you can integrate HYDRACUDA into your tool-calling layer.
+Both default to `hydracuda.yaml` in the current directory and both are read-only: no tool runs, no audit record is written, nothing on disk changes.
 
 ### Minimal integration example
 
@@ -103,79 +119,220 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-In your real application, the LLM agent calls `proxy.call(...)` instead of invoking tools directly.
+In your real application, the LLM agent calls `proxy.call(...)` instead of invoking tools directly. A denied call raises `PermissionError`; a call needing approval raises `ReviewRequired`.
+
+---
+
+## CLI
+
+```
+hydracuda init                          Write a starter hydracuda.yaml
+hydracuda validate [file] [--strict]    Check a policy
+hydracuda plan     [file] [--reasons]   Show what it decides
+```
+
+`validate` exits non-zero on an error. Warnings are reported but do not fail the
+command unless you pass `--strict`, which is what you want in CI.
+
+```
+$ hydracuda validate
+Policy: hydracuda.yaml
+Version 2, mode enforce, default deny, 2 rule(s), 1 adapter(s)
+
+warning: unpinned-when-field [rules[0] untrusted-agents-cannot-write]
+  tests context field(s) ['trust'], which are not listed in `pinned_context`.
+  Those values are supplied per call, so this rule can only be trusted if the
+  calling code never derives them from model output. Add them to
+  `pinned_context` to make HYDRACUDA enforce that.
+
+0 error(s), 1 warning(s)
+Policy is valid.
+```
+
+Eleven diagnostics are reported, from unreachable rules to blocking rules that a
+missing field slips past. The full table is in
+[the spec](docs/policy-spec.md#validate).
+
+`plan` walks the declared resource surface and prints one line per resource.
+Each is evaluated **with no parameters and no context**, which is all a policy
+file supplies on its own; rules that could change the outcome for a real call
+are flagged rather than guessed at.
+
+```
+$ hydracuda plan examples/policy.yaml
+Policy: examples/policy.yaml
+Version 2, mode enforce, default deny, 4 rule(s), 1 adapter(s)
+
+Declared surface: 3 resource(s). Evaluated with no parameters and no context.
+
+  ALLOW   read_file      allow-file-reads  [conditional: block-sensitive-paths]
+  DENY    delete_record  block-destructive-deletes
+  REVIEW  execute_shell  shell-requires-approval
+
+1 allow, 1 deny, 1 review
+1 resource(s) have a conditional outcome: the action above holds for a call with
+no parameters and no context, and the listed rules can change it for a real call.
+```
+
+`hydracuda check` still works as a deprecated alias for `validate`.
 
 ---
 
 ## Policy File
 
-HYDRACUDA policies are defined in YAML. The file created by `hydracuda init` looks similar to this:
+The full specification is [`docs/policy-spec.md`](docs/policy-spec.md). What
+follows is an orientation, not the authority.
+
+Policy is a separate, version-controllable YAML file. **Adapters** declare what
+exists — the resources and actions your integration exposes. **Rules** declare
+what is allowed. The two are deliberately separate: adding a tool is not the
+same act as permitting it.
 
 ```yaml
-version: 1
-mode: enforce   # enforce | shadow | review
+version: 2
+mode: enforce          # enforce | shadow | review
+default_action: deny   # what happens when no rule matches
+audit_path: .hydracuda/audit.db
 
-tools:
-  read_file:
-    allow: true
-    parameterRules:
+# Context fields the caller must not be able to influence. Listing a field here
+# makes HYDRACUDA enforce that it is pinned rather than supplied per call.
+pinned_context: [agent, trust]
+
+adapters:
+  - name: fs
+    type: local_tools
+    resources: [read_file, write_file]
+    config:
+      root: ./workspace   # paths are canonicalized and confined to this root
+
+rules:
+  # Ordered. First match wins.
+  - name: block-sensitive-paths
+    resource: read_file
+    action: deny
+    where:                      # request parameters — agent-controlled
       path:
-        denyPatterns:
-          - "\\.\\."          # block path traversal
-          - "/etc/"
-          - "/root/"
+        matches: ["/etc/", "/root/"]
 
-  delete_record:
-    allow: false
-    reason: "Destructive operation. Blocked by default."
+  - name: untrusted-agents-cannot-write
+    resource: write_file
+    action: deny
+    when:                       # evaluation context — integrator-controlled
+      trust:
+        equals: untrusted
 
-  execute_shell:
-    allow: review
-    rateLimit: "3/minute"
-
-audit:
-  path: .hydracuda/audit.db
+  - name: allow-file-reads
+    resource: read_file
+    action: allow
 ```
 
 Key concepts:
 
 - **mode**
-  - `enforce`: violations are blocked
-  - `shadow`: violations are logged but not blocked
-  - `review`: intended for future human-approval workflows
+  - `enforce`: a denied call is blocked
+  - `shadow`: the decision is computed and logged, and **the call executes anyway**. Use it to trial a policy against real traffic. A shadow policy enforces nothing, and `validate` warns about that.
+  - `review`: reserved; currently behaves as `enforce`
 
-- **tools**  
-  Each tool has an `allow` value:
-  - `true`  → allowed (subject to parameter rules)
-  - `false` → always denied
-  - `"review"` → queued for human review in a future release
+- **default_action**  
+  What happens when no rule matches. Defaults to `deny`, so adding a tool without adding a rule fails closed.
 
-- **parameterRules**  
-  `denyPatterns` are Python regular expressions evaluated against the string value of the parameter.
+- **rules**  
+  Evaluated in order, first match wins. `where` tests request parameters, which the agent controls. `when` tests evaluation context, which your code supplies. The distinction is a security boundary, not a naming convention — see [Trust model](docs/policy-spec.md#trust-model).
 
-- **audit.path**  
+- **resource patterns**  
+  Dot-separated namespaces. `*` matches one segment, `**` matches zero or more.
+
+- **audit_path**  
   Path to the SQLite audit database. The parent directory is created automatically if it does not exist.
+
+Version 1 files still load. They are translated to version 2 rules at load time
+and evaluated by the same engine, so decisions are identical to v0.2.0.
+
+### Keys that changed
+
+The v0.2.0 README documented several keys that do not exist. They were never
+read, so a policy using them was not doing what it said:
+
+| README said | Reality |
+|---|---|
+| `parameterRules` | `parameter_rules` |
+| `denyPatterns` | `deny_patterns` |
+| `rateLimit` | **Not implemented.** Now a load error rather than silently discarded. |
+| `audit: {path: ...}` | `audit_path`. The nested form is honoured as an alias, which it was not before. |
+
+Unknown keys are now rejected with a suggestion, so these fail loudly instead of
+being ignored:
+
+```
+$ hydracuda validate
+Policy: hydracuda.yaml
+error: schema
+  Tool 'read_file': unrecognized key(s) ['parameterRules']. 'parameterRules' —
+  did you mean 'parameter_rules'? Allowed: ['allow', 'parameter_rules', 'reason']
+Policy is invalid.
+```
 
 ---
 
 ## Audit Log
 
-HYDRACUDA writes one row per tool call decision to a local SQLite database.
+HYDRACUDA writes one row per decision to a local SQLite database.
 
-Table schema:
+| Column | Meaning |
+|---|---|
+| `id` | integer primary key |
+| `timestamp` | ISO 8601, UTC |
+| `tool` | resource the agent asked for |
+| `action` | `allow`, `deny`, `review` |
+| `reason` | short explanation |
+| `params` | JSON-encoded parameters, after normalization |
+| `rule` | name of the rule that decided, or null for the default |
+| `mode` | policy mode at the time of the decision |
+| `enforced` | whether the decision was acted on — `0` for a shadow-mode block |
+| `normalization` | what the adapter changed, e.g. a path canonicalization |
 
-- `id` (integer primary key)
-- `timestamp` (ISO 8601 string)
-- `tool` (tool name)
-- `action` (`allow`, `deny`, `review`)
-- `reason` (short explanation)
-- `params` (JSON-encoded parameters)
+An existing database from v0.1.0 or v0.2.0 is migrated in place on first write;
+the four columns after `params` are added with `ALTER TABLE`. Rows written
+before the migration have `NULL` there, and every decision back then was
+enforced.
+
+`enforced` is the column to read before drawing conclusions. Under `mode:
+shadow` a row can say `deny` for a call that ran to completion, so a count of
+denies is not a count of calls blocked.
 
 This makes it easy to:
 
 - Review which tools are actually used in production
-- See which policies are firing most often
+- See which rules are firing most often
 - Build dashboards or alerts on top of the audit data
+
+> **The audit log is untrusted input.** `tool` is whatever name the agent asked
+> for, `reason` quotes that name back, and `params` is the raw arguments the
+> agent supplied. A blocked call is still a recorded call, so refusing an action
+> does not keep its payload out of the log. Escape these fields before rendering
+> them anywhere — unescaped, they were a stored XSS in the bundled dashboard up
+> to and including v0.2.0.
+
+---
+
+## Dashboard
+
+Optional, and downstream of everything else. HYDRACUDA runs fully headless: the
+runtime and both CLI commands behave identically whether the dashboard is
+installed, running, or absent.
+
+```bash
+pip install "hydracuda[dashboard]"
+HYDRACUDA_AUDIT_DB=.hydracuda/audit.db python -m dashboard.app
+# http://localhost:8321
+```
+
+It is a read-only consumer of the audit log and holds no policy state: it never
+imports `hydracuda`, never reads a policy file, and cannot influence a decision.
+Its SQLite connections are opened `mode=ro`, so that is enforced by the driver —
+which matters because the audit log has a live writer.
+
+Single-user, localhost, no auth. Do not expose it.
 
 ---
 
@@ -192,8 +349,7 @@ They are fully decoupled. HYDRACUDA does not require VAAST, but future versions 
 
 ## Documentation
 
-For full documentation, examples, and integration guides:
-
+- [`docs/policy-spec.md`](docs/policy-spec.md) — policy format, trust model, adapters, diagnostics
 - https://docs.xtrinel.com/hydracuda
 
 ---
