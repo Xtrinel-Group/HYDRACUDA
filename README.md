@@ -52,11 +52,9 @@ HYDRACUDA targets Python 3.10 and above.
 pip install hydracuda
 ```
 
-The optional dashboard needs Flask:
-
-```bash
-pip install "hydracuda[dashboard]"
-```
+That installs the runtime and the CLI. The optional dashboard is not part of the
+package — it is a development tool you run from a checkout, see
+[Dashboard](#dashboard).
 
 To work on the project locally:
 
@@ -319,13 +317,21 @@ This makes it easy to:
 
 Optional, and downstream of everything else. HYDRACUDA runs fully headless: the
 runtime and both CLI commands behave identically whether the dashboard is
-installed, running, or absent.
+running or absent.
+
+It is **not shipped in the wheel or the sdist**, so `pip install hydracuda` does
+not give you `dashboard.app`. It is a development tool, run from a clone:
 
 ```bash
-pip install "hydracuda[dashboard]"
-HYDRACUDA_AUDIT_DB=.hydracuda/audit.db python -m dashboard.app
+git clone https://github.com/Xtrinel-Group/HYDRACUDA.git
+cd HYDRACUDA
+pip install -e ".[dashboard]"
+HYDRACUDA_AUDIT_DB=/path/to/.hydracuda/audit.db python -m dashboard.app
 # http://localhost:8321
 ```
+
+It reads the audit log at `$HYDRACUDA_AUDIT_DB`, which can be any project's log
+— the dashboard does not have to live beside the agent it is reporting on.
 
 It is a read-only consumer of the audit log and holds no policy state: it never
 imports `hydracuda`, never reads a policy file, and cannot influence a decision.

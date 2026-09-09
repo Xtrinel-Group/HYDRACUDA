@@ -26,16 +26,28 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 DASHBOARD_APP = REPO_ROOT / "dashboard" / "app.py"
+TEMPLATE = REPO_ROOT / "dashboard" / "templates" / "index.html"
+
+# The dashboard ships in neither the wheel nor the sdist — it is a development
+# tool run from a checkout. The sdist does carry these tests, so everything that
+# needs the dashboard source skips when it is absent rather than failing there.
+# The headless tests below do not, and are the ones that matter in that case.
+needs_source = pytest.mark.skipif(
+    not DASHBOARD_APP.exists(),
+    reason="dashboard source is not distributed; run from a git checkout",
+)
 
 
 @pytest.fixture
 def dashboard_app():
-    """The dashboard module, skipped when the optional extra is not installed.
+    """The dashboard module, skipped when it is not available to import.
 
     Deliberately not a module-level import: the tests proving that the core and
     the CLI run headless must still run in exactly the environment where Flask
     is missing.
     """
+    if not DASHBOARD_APP.exists():
+        pytest.skip("dashboard source is not distributed; run from a git checkout")
     pytest.importorskip("flask", reason="dashboard extra not installed")
 
     import dashboard.app
@@ -62,6 +74,7 @@ def test_the_core_package_does_not_reference_flask_or_the_dashboard():
     assert offenders == []
 
 
+@needs_source
 def test_the_dashboard_does_not_import_hydracuda():
     """It cannot hold policy state if it cannot reach the policy code.
 
@@ -77,6 +90,7 @@ def test_the_dashboard_does_not_import_hydracuda():
     assert not [line for line in imports if "hydracuda" in line.lower()]
 
 
+@needs_source
 def test_the_dashboard_reads_no_policy_file():
     source = DASHBOARD_APP.read_text()
     assert "load_policy" not in source
@@ -84,6 +98,7 @@ def test_the_dashboard_reads_no_policy_file():
     assert ".yaml" not in source
 
 
+@needs_source
 def test_the_dashboard_issues_no_write_statements():
     """Checks the string literals, not the prose — the docstring says "create"."""
     literals = [
@@ -374,8 +389,6 @@ async def test_the_api_reads_a_log_the_proxy_actually_wrote(
 
 # --- output escaping -----------------------------------------------------
 
-TEMPLATE = REPO_ROOT / "dashboard" / "templates" / "index.html"
-
 
 def test_a_tool_name_is_returned_verbatim_by_the_api(client, audit_db):
     """The API is JSON, so it must not mangle the value; the page escapes it."""
@@ -411,6 +424,7 @@ REVIEWED_INTERPOLATIONS = {
 HTML_SINKS = ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write")
 
 
+@needs_source
 def test_every_interpolation_in_the_page_is_escaped_or_reviewed():
     """The guard has to be structural, not a list of the fields caught so far.
 
@@ -432,6 +446,7 @@ def test_every_interpolation_in_the_page_is_escaped_or_reviewed():
     assert unescaped == [], f"unescaped interpolation(s): {unescaped}"
 
 
+@needs_source
 def test_the_page_uses_no_markup_sink_beyond_the_two_audited_ones():
     """Two innerHTML assignments are audited above. A third, or any other sink,
     is new attack surface that has not been reviewed."""
@@ -447,6 +462,7 @@ def test_the_page_uses_no_markup_sink_beyond_the_two_audited_ones():
     assert all("innerHTML" in line for line in lines)
 
 
+@needs_source
 def test_the_api_does_not_expose_fields_the_page_would_render_unescaped():
     """`params` and `id` are returned but not rendered.
 

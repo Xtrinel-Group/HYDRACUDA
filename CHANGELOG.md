@@ -34,6 +34,15 @@ and reason strings recorded from v0.2.0 and asserts they still hold.
   known actions, and a test now fails on *any* unescaped interpolation rather
   than on a list of the fields already fixed.
 
+- **The published file list is now explicit, which is how the vulnerable file
+  reached PyPI.** There was no sdist configuration, so hatchling's default —
+  every file git does not ignore — shipped the dashboard in the v0.2.0 source
+  distribution even though the wheel excluded it. The sdist now lists what it
+  contains: `src/hydracuda`, `tests`, `examples`, `docs`, and the three root
+  documents. What stopped shipping: `dashboard/`, the retired
+  `deprecation/baracuda` package, and `.github/workflows`. `tests/test_packaging.py`
+  fails if any of those returns, so a new directory in the repository cannot
+  become part of a release by default.
 - Audit records are documented as untrusted input. A blocked call is still a
   recorded call, so denying an action does not keep its payload out of the log —
   anything built on that log has to escape `tool`, `reason`, and `params`.
@@ -102,6 +111,10 @@ and reason strings recorded from v0.2.0 and asserts they still hold.
   `tests/test_docs.py`, which is how that drift is prevented rather than
   re-fixed.
 - Dashboard: "Policy Hit Rates" showed top tools, so it says Top Tools.
+- The dashboard is a development tool run from a checkout, and is documented as
+  such. It is in neither artifact, so the `dashboard` extra installs Flask for a
+  `pip install -e ".[dashboard]"` clone — it does not install the dashboard.
+  Point it at any project's log with `HYDRACUDA_AUDIT_DB`.
 
 ### Removed
 
