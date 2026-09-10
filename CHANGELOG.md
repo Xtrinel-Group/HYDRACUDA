@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-09-10 — distribution
+
+0.4.0 moved the decision engine into Rust; this release ships it. `pip install
+hydracuda` gets a wheel carrying the compiled engine on macOS (Apple silicon and
+Intel), Linux x86\_64 and Windows x86\_64, and the universal pure-Python wheel
+everywhere else. Neither path needs a Rust toolchain, and the sdist stays pure
+Python so a source install needs no `cargo` either. The standalone `hcuda` binary
+is attached to this release for the same four platforms rather than built from a
+checkout, and every artifact is mirrored to Cloudflare R2 under its tag.
+
+Nothing about the runtime changed. No file under `src/hydracuda/` or `core/` is
+touched, decisions are identical to 0.4.0 on both engines, and policy evaluation
+is still fully local with no network call in the decision loop.
 
 ### Added
 
