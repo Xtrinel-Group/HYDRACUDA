@@ -1,5 +1,16 @@
 [build-system]
-requires = ["hatchling"]
+# Pinned to a verified band, with an upper bound, because this was unpinned and
+# drifted: hatchling 1.32.0 raised its default core metadata version from 2.4 to
+# 2.5, and the v0.3.0 publish failed at Twine's metadata check without a single
+# line of this repository having changed. Probed per release —
+# 1.27/1.29/1.31 emit 2.4, 1.32 emits 2.5 — and the publish action's Twine 7
+# accepts both, so the whole band below is known good.
+#
+# The upper bound is the point. A release pipeline that only runs at release
+# time cannot also be the place a floating build dependency is discovered.
+# Raise this deliberately, after checking what the new default emits and what
+# the pinned pypa/gh-action-pypi-publish accepts.
+requires = ["hatchling>=1.27,<1.33"]
 build-backend = "hatchling.build"
 
 [project]

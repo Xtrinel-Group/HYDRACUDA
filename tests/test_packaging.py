@@ -91,6 +91,22 @@ def test_the_sdist_carries_the_tests_that_prove_the_boundary(config):
     assert "/tests" in sdist_include(config)
 
 
+def test_every_build_requirement_has_an_upper_bound(config):
+    """An unpinned build backend is a release that changes without a commit.
+
+    `requires = ["hatchling"]` is how v0.3.0 failed to publish: hatchling 1.32.0
+    raised its default core metadata version to 2.5, the pinned Twine refused it,
+    and nothing in this repository had changed. A floor alone does not prevent
+    that — the ceiling is the control.
+    """
+    unbounded = [
+        requirement
+        for requirement in config["build-system"]["requires"]
+        if "<" not in requirement
+    ]
+    assert unbounded == [], f"build requirement(s) with no upper bound: {unbounded}"
+
+
 def test_the_version_is_the_same_in_both_places(config):
     """`pyproject.toml` and `__version__` are bumped by hand, in two files.
 
