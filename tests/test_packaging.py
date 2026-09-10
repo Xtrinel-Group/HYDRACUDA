@@ -18,6 +18,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 README = REPO_ROOT / "README.md"
+CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 #: Nothing here belongs in a release. `dashboard` is a development tool and far
 #: too generic a name for site-packages; the rest is repository furniture.
@@ -88,6 +89,28 @@ def test_the_sdist_carries_the_tests_that_prove_the_boundary(config):
     and the headless tests are exactly the ones that matter without the
     dashboard present."""
     assert "/tests" in sdist_include(config)
+
+
+def test_the_version_is_the_same_in_both_places(config):
+    """`pyproject.toml` and `__version__` are bumped by hand, in two files.
+
+    A wheel whose metadata says one version and whose `__version__` says another
+    is a release nobody can reason about from the outside.
+    """
+    import hydracuda
+
+    assert config["project"]["version"] == hydracuda.__version__
+
+
+def test_the_changelog_has_a_section_for_the_version_being_released(config):
+    """A release tagged from a tree whose changelog still says "Unreleased" is
+    how a version ships with no record of what changed in it."""
+    version = config["project"]["version"]
+    headings = re.findall(r"^## (.+)$", CHANGELOG.read_text(), re.M)
+
+    assert any(heading.startswith((version, f"v{version}")) for heading in headings), (
+        f"no CHANGELOG heading for {version}; found {headings[:3]}"
+    )
 
 
 def test_the_readme_does_not_tell_pip_users_to_run_the_dashboard():

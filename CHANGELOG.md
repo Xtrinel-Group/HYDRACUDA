@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Phase 1: policy as code
+## 0.3.0 — 2026-09-09 — Phase 1: policy as code
 
 Policy moves into an external, version-controllable file; adapters declare what
 exists separately from rules declaring what is allowed; two read-only CLI
