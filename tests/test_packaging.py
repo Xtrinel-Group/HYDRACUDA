@@ -70,6 +70,23 @@ def test_neither_artifact_ships_the_dashboard_or_repository_furniture(config):
         )
 
 
+def test_the_pure_python_wheel_excludes_the_compiled_engine(config):
+    """`py3-none-any` has to mean it.
+
+    `scripts/build_extension.py` writes the compiled engine into
+    `src/hydracuda/`, inside the directory this wheel packages, so without an
+    exclusion a developer's local build would be swept into a release artifact
+    that claims to run on any platform. Per-platform wheels are a separate
+    artifact, built by the release pipeline.
+    """
+    excluded = build_targets(config)["wheel"].get("exclude", [])
+    for pattern in ("*.so", "*.pyd", "*.dylib"):
+        assert pattern in excluded, (
+            f"{pattern} is not excluded from the wheel; a locally built "
+            "extension would ship inside a py3-none-any artifact"
+        )
+
+
 def test_every_sdist_pattern_is_anchored(config):
     """Gitignore-style patterns match at any depth unless anchored.
 

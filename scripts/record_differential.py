@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import yaml  # noqa: E402
 
+from hydracuda._backend import use_backend  # noqa: E402
 from hydracuda.engine import PolicyEngine  # noqa: E402
 from hydracuda.policy import PolicyError, parse_policy  # noqa: E402
 
@@ -99,7 +100,12 @@ def record_policy(case: dict[str, Any]) -> dict[str, Any]:
     except PolicyError as exc:
         return {"name": name, "load_error": normalize_error(str(exc))}
 
-    engine = PolicyEngine(policy)
+    # Explicitly the Python engine. This file is the record of what Python
+    # decides, and `PolicyEngine` uses the compiled engine by default wherever it
+    # is built — which would make the golden file a recording of Rust and
+    # `core/tests/differential.rs` a comparison of Rust against itself.
+    with use_backend("python"):
+        engine = PolicyEngine(policy)
     decisions = []
     for request in case.get("requests") or []:
         decision = engine.evaluate(

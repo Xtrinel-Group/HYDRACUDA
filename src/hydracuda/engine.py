@@ -4,11 +4,19 @@ Rules are evaluated in file order and the first match wins. If nothing
 matches, the policy's `default_action` applies. Evaluation is pure: no I/O, no
 clock reads, no model calls, so the same request always yields the same
 decision.
+
+Two engines implement that, and `hydracuda._backend` picks between them: the
+rule loop below, and a compiled Rust one reached through `hydracuda._core`. What
+crosses to Rust is the verdict only — the `(action, reason, rule)` triple — so
+the `Decision` a caller receives is built here either way, by the same code,
+from the same `params` object. Both engines are held to the same tests; see
+`tests/test_backend_parity.py`.
 """
 
 from dataclasses import dataclass, field
 from typing import Any
 
+from hydracuda._backend import build_engine
 from hydracuda.conditions import matches_conditions, resource_matches
 from hydracuda.policy import Policy
 
@@ -62,6 +70,11 @@ class PolicyEngine:
 
     def __init__(self, policy: Policy):
         self.policy = policy
+        #: The compiled engine for this policy, or None on the pure-Python path.
+        #: Built here rather than per call so regexes compile once per policy.
+        #: The policy is treated as frozen from this point; mutating `rules`
+        #: afterwards would leave the two out of step.
+        self._rust = build_engine(policy)
 
     def evaluate(
         self,
@@ -77,6 +90,22 @@ class PolicyEngine:
         """
         params = params or {}
         context = context or {}
+
+        if self._rust is not None:
+            # `dict(...)` because the extension takes a dict and a caller may
+            # pass any mapping. The copy is not what the `Decision` carries: the
+            # caller's own object is, exactly as on the Python path.
+            action, reason, rule = self._rust.evaluate(
+                tool_name, dict(params), dict(context)
+            )
+            return self._decide(
+                action=action,
+                reason=reason,
+                tool_name=tool_name,
+                params=params,
+                context=context,
+                rule=rule,
+            )
 
         for rule in self.policy.rules:
             if not resource_matches(rule.resource, tool_name):

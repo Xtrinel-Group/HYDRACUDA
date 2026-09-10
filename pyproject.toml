@@ -52,6 +52,12 @@ dashboard = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hydracuda"]
+# `scripts/build_extension.py` writes the compiled engine into `src/hydracuda/`,
+# because that is where the editable install looks for it. Hatchling would then
+# sweep it into this wheel — a platform-specific binary inside an artifact tagged
+# `py3-none-any`, which would install on machines it cannot load on. Excluded
+# until the release pipeline builds the per-platform wheels properly.
+exclude = ["*.so", "*.pyd", "*.dylib"]
 
 # Curated deliberately. Hatchling's default sdist is "every file git does not
 # ignore", which is how the dashboard reached PyPI: it was never in the wheel,

@@ -2,6 +2,7 @@
 
 __version__ = "0.3.1"
 
+from hydracuda._backend import engine_backend, engine_version
 from hydracuda.adapters import (
     Adapter,
     AdapterError,
@@ -49,6 +50,8 @@ __all__ = [
     "analyze",
     "build_adapter",
     "canonicalize_path",
+    "engine_backend",
+    "engine_version",
     "load_policy",
     "parse_policy",
     "plan",
