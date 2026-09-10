@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- The release workflow now finishes the install-script channel. Two additions,
+  both on a published release and both skipped for a prerelease:
+
+  `hydracuda/latest.txt` in the R2 bucket is pointed at the new tag, then read
+  back and compared. That object is what `curl … | sh` resolves when nobody pins
+  a version, and it is the only mutable key in the bucket — everything under
+  `hydracuda/<tag>/` stays immutable, so a wrong pointer is the one thing here
+  that can regress quietly rather than 404. A prerelease is still installable by
+  tag; it just does not become what a first-time install gets.
+
+  A `repository_dispatch` is then sent to
+  [Xtrinel-Group/hydracuda-install](https://github.com/Xtrinel-Group/hydracuda-install),
+  the repository holding the Cloudflare Worker that serves the installer, so a
+  release redeploys it and a Worker running older code than its `main` cannot
+  survive a release unnoticed. The tag travels in the payload so that deploy can
+  check what it deployed against what was released.
+
+  This needs a credential Actions does not mint: `GITHUB_TOKEN` is scoped to this
+  repository, so cross-repository dispatch needs `INSTALL_DISPATCH_TOKEN`, a
+  fine-grained PAT with Contents: write on `hydracuda-install` and nothing else.
+  A missing token fails that job rather than skipping it — a redeploy that
+  silently stops happening is indistinguishable from one that works.
+
+  Nothing about the runtime changes. Policy evaluation is still local and makes
+  no network call.
+
 ## 0.5.0 — 2026-09-10 — distribution
 
 0.4.0 moved the decision engine into Rust; this release ships it. `pip install
