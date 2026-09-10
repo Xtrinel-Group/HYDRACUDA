@@ -233,21 +233,33 @@ def test_the_wheel_that_cannot_be_executed_has_its_architecture_read(publish):
 # --- credentials ---
 
 
-def test_the_r2_job_reads_all_four_values_from_secrets(publish):
-    environment = publish["jobs"]["mirror"]["steps"][-1]["env"]
-    expected = {
-        "R2_ACCESS_KEY_ID",
-        "R2_SECRET_ACCESS_KEY",
-        "CLOUDFLARE_ACCOUNT_ID",
-        "R2_BUCKET_NAME",
-    }
-    referenced = {
+#: Everything an R2 write needs. Named once because more than one step does it.
+R2_SECRETS = {
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "CLOUDFLARE_ACCOUNT_ID",
+    "R2_BUCKET_NAME",
+}
+
+
+def secrets_referenced(step: dict) -> set[str]:
+    return {
         match
-        for value in environment.values()
+        for value in step.get("env", {}).values()
         if isinstance(value, str)
         for match in re.findall(r"secrets\.([A-Z0-9_]+)", value)
     }
-    assert expected <= referenced, f"missing: {expected - referenced}"
+
+
+# Every step that talks to R2, not just the last one: the job gained a second
+# such step when latest.txt arrived, and indexing by position would have moved
+# the assertion onto it and left the upload unchecked.
+@pytest.mark.parametrize("fragment", ["aws s3 cp .", "latest.txt"])
+def test_every_r2_step_reads_all_four_values_from_secrets(publish, fragment):
+    step = step_running(publish["jobs"]["mirror"], fragment)
+    assert step is not None, f"no step in mirror runs {fragment!r}"
+    referenced = secrets_referenced(step)
+    assert R2_SECRETS <= referenced, f"missing: {R2_SECRETS - referenced}"
 
 
 @pytest.mark.parametrize("path", workflow_files(), ids=lambda p: p.name)
@@ -290,3 +302,82 @@ def test_the_release_upload_job_is_the_only_one_that_can_write_contents(publish)
         if job.get("permissions", {}).get("contents") == "write"
     ]
     assert writers == ["attach"]
+
+
+# --- the installer channel ---
+#
+# `curl | sh` resolves a version from latest.txt in the bucket, so a release that
+# uploads artifacts but leaves that pointer behind ships a version nobody
+# installs by default. The pointer is the one mutable key in the bucket, which is
+# also the one place a release can regress silently: everything else is keyed by
+# tag and would 404 rather than serve the wrong thing.
+
+
+def latest_step(publish: dict) -> dict:
+    step = step_running(publish["jobs"]["mirror"], "latest.txt")
+    assert step is not None, "nothing in the mirror job writes latest.txt"
+    return step
+
+
+def test_a_release_moves_the_pointer_the_installer_reads(publish):
+    run = latest_step(publish)["run"]
+
+    # From the tag, not from a version file: the release event is the fact.
+    assert 'printf ' in run and '"$TAG"' in run, "latest.txt is not written from the tag"
+    # The mutable key, not one under the tag prefix — writing
+    # hydracuda/<tag>/latest.txt would leave the default install unchanged.
+    assert 'hydracuda/latest.txt"' in run, "latest.txt is not written to the bucket root"
+
+
+def test_the_pointer_is_read_back_after_it_is_written(publish):
+    """A write that succeeded and left the previous tag in place would send every
+    new install to the old version, and nothing else here would notice."""
+    run = latest_step(publish)["run"]
+    copies = [line for line in run.splitlines() if "aws s3 cp" in line]
+    assert len(copies) == 2, f"expected a write and a read back, got {len(copies)}"
+    assert 'test "$(cat readback.txt)" = "$TAG"' in run, "the read back is not compared"
+
+
+def test_a_prerelease_does_not_become_the_default_install(publish):
+    """`latest` is what a first-time `curl | sh` gets, and that is never a
+    release candidate. A prerelease stays installable by tag."""
+    assert latest_step(publish)["if"] == "${{ !github.event.release.prerelease }}"
+    assert publish["jobs"]["redeploy-installer"]["if"] == (
+        "${{ !github.event.release.prerelease }}"
+    )
+
+
+def test_the_installer_worker_is_told_about_a_release(publish):
+    job = publish["jobs"]["redeploy-installer"]
+    # After the mirror: a redeploy that raced the upload could deploy against a
+    # pointer for a release whose artifacts are not there yet.
+    assert job["needs"] == ["mirror"]
+
+    run = job["steps"][0]["run"]
+    assert "repos/Xtrinel-Group/hydracuda-install/dispatches" in run
+    # The event type the receiving workflow subscribes to. A typo here is a
+    # dispatch that returns 204 and triggers nothing.
+    assert 'event_type: "hydracuda-release"' in run
+    # And the tag travels with it, so the deploy can check what it deployed
+    # against what was released instead of deploying blind.
+    assert "client_payload: {tag: $tag}" in run
+
+
+def test_the_dispatch_uses_a_token_that_can_leave_this_repository(publish):
+    """GITHUB_TOKEN is scoped to this repository, so a cross-repository dispatch
+    with it fails at the moment of a release. This is the one place the pipeline
+    needs a credential that is not minted by Actions."""
+    step = publish["jobs"]["redeploy-installer"]["steps"][0]
+    assert secrets_referenced(step) == {"INSTALL_DISPATCH_TOKEN"}
+    assert "secrets.GITHUB_TOKEN" not in yaml.dump(step)
+
+
+def test_a_missing_dispatch_token_fails_loudly(publish):
+    """Skipping with a warning would make the redeploy silently stop happening,
+    which is indistinguishable from it working. The job is terminal, so failing
+    costs a red check on a release that has otherwise fully succeeded — and says
+    which secret is missing."""
+    run = publish["jobs"]["redeploy-installer"]["steps"][0]["run"]
+    guard = run[run.index('if [ -z "${GH_TOKEN:-}" ]') :]
+    assert "::error::" in guard
+    assert "exit 1" in guard.split("fi")[0]

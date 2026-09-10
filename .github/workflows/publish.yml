@@ -487,3 +487,97 @@ jobs:
           echo "mirrored to s3://$BUCKET/hydracuda/$TAG/"
           aws s3 ls "s3://$BUCKET/hydracuda/$TAG/" \
             --endpoint-url "https://$ACCOUNT_ID.r2.cloudflarestorage.com"
+
+      # The pointer the install script resolves when nobody pins a version. It
+      # lives here rather than in the installer Worker so that shipping a release
+      # is what changes the default install, and deploying the Worker cannot.
+      #
+      # Not written for a prerelease: `latest` means the version a first-time
+      # `curl | sh` should get, and that is never a release candidate. A
+      # prerelease is still installable, by tag.
+      - name: point latest.txt at this release
+        if: ${{ !github.event.release.prerelease }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+          TAG: ${{ github.event.release.tag_name }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          set -euo pipefail
+          if [ -z "$ACCOUNT_ID" ] || [ -z "$BUCKET" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID or R2_BUCKET_NAME is not set"
+            exit 1
+          fi
+
+          # The installer strips whitespace, but writing a bare tag with one
+          # trailing newline is what a text file should contain.
+          printf '%s\n' "$TAG" > latest.txt
+
+          # This one object *is* overwritten in place, which is the whole point:
+          # it is the only mutable key in the bucket. Everything under
+          # hydracuda/<tag>/ stays immutable.
+          aws s3 cp latest.txt "s3://$BUCKET/hydracuda/latest.txt" \
+            --endpoint-url "https://$ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type "text/plain" \
+            --no-progress
+
+          # Read it back. A write that reported success and left the previous tag
+          # in place would send every new install to the old version, and nothing
+          # else in this pipeline would notice.
+          aws s3 cp "s3://$BUCKET/hydracuda/latest.txt" readback.txt \
+            --endpoint-url "https://$ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --no-progress
+          echo "latest.txt now reads: $(cat readback.txt)"
+          test "$(cat readback.txt)" = "$TAG"
+
+  # ---------------------------------------------------------------------------
+  # Tell the installer Worker a release happened.
+  #
+  # The Worker resolves versions through latest.txt, so it does not *need* a
+  # redeploy to serve a new release — this exists so that the release is the one
+  # event that touches every distribution channel, and so a Worker running older
+  # code than main cannot survive a release unnoticed.
+  #
+  # Cross-repository dispatch cannot use GITHUB_TOKEN: it is scoped to this
+  # repository. INSTALL_DISPATCH_TOKEN is a fine-grained PAT with Contents:
+  # write on Xtrinel-Group/hydracuda-install and nothing else.
+  # ---------------------------------------------------------------------------
+  redeploy-installer:
+    name: redeploy the install Worker
+    needs: [mirror]
+    # A prerelease changes nothing the Worker serves by default, because
+    # latest.txt was not moved for it either.
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: dispatch to hydracuda-install
+        env:
+          GH_TOKEN: ${{ secrets.INSTALL_DISPATCH_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::INSTALL_DISPATCH_TOKEN is not set, so the installer" \
+              "Worker was not redeployed for $TAG. Everything else in this" \
+              "release succeeded; deploy it by hand from the hydracuda-install" \
+              "repository, or add the secret."
+            exit 1
+          fi
+
+          # The tag travels in the payload so the receiving workflow can check
+          # that what it deployed agrees with what was released, rather than
+          # deploying blind. Built with jq and passed as JSON: `-f` cannot
+          # express a nested object without relying on bracket syntax, and a tag
+          # interpolated into a hand-written JSON string is a quoting bug waiting
+          # to happen.
+          jq -n --arg tag "$TAG" \
+            '{event_type: "hydracuda-release", client_payload: {tag: $tag}}' \
+            | gh api --method POST \
+              repos/Xtrinel-Group/hydracuda-install/dispatches \
+              --input -
+
+          echo "dispatched hydracuda-release ($TAG) to Xtrinel-Group/hydracuda-install"
