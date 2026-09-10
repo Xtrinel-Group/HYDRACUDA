@@ -55,8 +55,13 @@ packages = ["src/hydracuda"]
 # `scripts/build_extension.py` writes the compiled engine into `src/hydracuda/`,
 # because that is where the editable install looks for it. Hatchling would then
 # sweep it into this wheel — a platform-specific binary inside an artifact tagged
-# `py3-none-any`, which would install on machines it cannot load on. Excluded
-# until the release pipeline builds the per-platform wheels properly.
+# `py3-none-any`, which would install on machines it cannot load on.
+#
+# Permanent, not a placeholder. This is the *fallback* wheel, and its whole job is
+# to install anywhere and run the pure-Python engine; the compiled engine ships in
+# the platform wheels maturin builds. A release runs both builds from the same
+# checkout, so without this exclusion whichever ran second would decide what the
+# universal wheel contains.
 exclude = ["*.so", "*.pyd", "*.dylib"]
 
 # Curated deliberately. Hatchling's default sdist is "every file git does not
@@ -90,3 +95,24 @@ include = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+# Two build paths, one distribution. `build-backend` above is hatchling, which
+# produces the sdist and the universal `py3-none-any` wheel; `maturin build
+# --manifest-path bindings/python/Cargo.toml` reads the section below and produces
+# a platform wheel with the compiled engine inside it. maturin's CLI does not
+# require being the declared PEP 517 backend, only this configuration, so both
+# artifacts come from one set of `[project]` metadata and cannot disagree about
+# the version, the dependencies, or the console script.
+#
+# This section used to live in `bindings/python/pyproject.toml`, where it existed
+# only to stop maturin walking up and naming its wheel `hydracuda`. That is now
+# exactly what it should do, so the file is gone and the config is here.
+#
+# `python-source = "src"` is what makes the layout mixed: the wheel gets the whole
+# Python package plus `hydracuda/_core.abi3.so`, rather than the bare module.
+# `abi3-py310` in the crate means one wheel per platform covers every Python from
+# 3.10 up, including versions released after the wheel was built.
+[tool.maturin]
+manifest-path = "bindings/python/Cargo.toml"
+module-name = "hydracuda._core"
+python-source = "src"

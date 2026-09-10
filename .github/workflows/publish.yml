@@ -1,31 +1,396 @@
-name: Publish HYDRACUDA to PyPI
+name: Publish HYDRACUDA
 
+# Fires on a published GitHub Release, not on a tag push. A tag is cheap to push
+# by accident and cheap to delete; a PyPI version number can never be reused, so
+# the trigger is the deliberate act.
 on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
+env:
+  # abi3 means one wheel per platform serves every Python from 3.10 up, so this
+  # is only the interpreter maturin links against, not a supported-version list.
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  publish:
+  # ---------------------------------------------------------------------------
+  # The fallback artifacts: a curated sdist and the universal `py3-none-any`
+  # wheel. This wheel is why no install can break — a platform with no wheel
+  # below installs this one, runs the pure-Python engine, and needs no Rust
+  # toolchain. It is a supported configuration, not a degraded one.
+  # ---------------------------------------------------------------------------
+  universal:
+    name: sdist + universal wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install build twine
+      - run: python -m build
+      - run: python -m twine check --strict dist/*
+
+      - name: the universal wheel is pure
+        run: |
+          python - <<'PY'
+          import glob, sys, zipfile
+
+          wheels = glob.glob("dist/*-py3-none-any.whl")
+          if len(wheels) != 1:
+              sys.exit(f"expected one universal wheel, found {wheels}")
+          with zipfile.ZipFile(wheels[0]) as archive:
+              binaries = [
+                  name
+                  for name in archive.namelist()
+                  if name.endswith((".so", ".pyd", ".dylib"))
+              ]
+          if binaries:
+              sys.exit(f"{wheels[0]} is tagged py3-none-any and contains {binaries}")
+          print(f"{wheels[0]}: no compiled artifacts")
+          PY
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-universal
+          path: dist/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Platform wheels, each carrying the compiled engine. Built by maturin from the
+  # root `[tool.maturin]` config, so they share one set of `[project]` metadata
+  # with the universal wheel above and cannot disagree about the version.
+  # ---------------------------------------------------------------------------
+  wheels:
+    name: wheel (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # GitHub no longer offers an Intel macOS runner — the runner-images
+        # releases carry only `macos-15`/`macos-26`, both arm64, and `macos-13`
+        # and `macos-14` are retired. So `x86_64-apple-darwin` is cross-compiled
+        # from the arm64 runner. That is fine for an abi3 extension: on macOS it
+        # resolves Python symbols by dynamic lookup at load time rather than
+        # linking libpython, so no x86_64 interpreter is needed to build it.
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: macos-15
+            target: x86_64-apple-darwin
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          # `auto` builds the Linux wheel inside a manylinux container, so it is
+          # tagged against an old glibc rather than against whatever the runner
+          # image happens to ship. A wheel tagged for the runner's glibc installs
+          # on the runner and fails on a user's older distro.
+          manylinux: auto
+          args: >-
+            --release
+            --locked
+            --manifest-path bindings/python/Cargo.toml
+            --out dist
+
+      # The whole point of a platform wheel. If the compiled module is missing the
+      # wheel is a mislabelled copy of the universal one: it would install, run
+      # the pure-Python engine, and report success while shipping nothing.
+      - name: the platform wheel carries the compiled engine, for this target
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          python - <<'PY'
+          import glob, os, sys, zipfile
+
+          wheels = [w for w in glob.glob("dist/*.whl") if "py3-none-any" not in w]
+          if len(wheels) != 1:
+              sys.exit(f"expected one platform wheel, found {wheels}")
+          wheel = wheels[0]
+
+          with zipfile.ZipFile(wheel) as archive:
+              names = archive.namelist()
+          modules = [
+              name
+              for name in names
+              if name.startswith("hydracuda/_core")
+              and name.endswith((".so", ".pyd", ".dylib"))
+          ]
+          if not modules:
+              sys.exit(f"{wheel} has no hydracuda/_core extension module")
+          if "hydracuda/engine.py" not in names:
+              sys.exit(f"{wheel} has the module but not the Python package")
+
+          # The x86_64 macOS wheel is cross-compiled, so the failure to guard is a
+          # wheel built for the host and named for the target. The platform tag is
+          # what pip matches on, so checking it is checking what users get.
+          required = {
+              "aarch64-apple-darwin": ("macosx", "arm64"),
+              "x86_64-apple-darwin": ("macosx", "x86_64"),
+              "x86_64-unknown-linux-gnu": ("manylinux", "x86_64"),
+              "x86_64-pc-windows-msvc": ("win_amd64",),
+          }[os.environ["TARGET"]]
+          missing = [part for part in required if part not in os.path.basename(wheel)]
+          if missing:
+              sys.exit(f"{wheel} does not look like a {os.environ['TARGET']} wheel: missing {missing}")
+
+          print(f"{wheel}: {modules[0]}")
+          PY
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # The standalone `hcuda` binary, same four targets.
+  # ---------------------------------------------------------------------------
+  binaries:
+    name: hcuda (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Same runner situation as the wheels: no Intel macOS runner exists, so
+        # `x86_64-apple-darwin` is cross-compiled and cannot be executed here.
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            native: true
+          - runner: macos-15
+            target: x86_64-apple-darwin
+            native: false
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            native: true
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            native: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo build --release --locked -p hydracuda-cli --target ${{ matrix.target }}
+
+      # Run it before shipping it. A binary that builds and will not start — a
+      # link error, a bad target triple — is the failure this catches, and it is
+      # cheap because `test` needs nothing but a policy file.
+      - name: the binary runs
+        if: matrix.native
+        shell: bash
+        run: |
+          binary="target/${{ matrix.target }}/release/hcuda"
+          [ "${{ runner.os }}" = "Windows" ] && binary="$binary.exe"
+          "$binary" --version
+          "$binary" test examples/policy.yaml
+
+      # The cross-compiled one cannot be executed on an arm64 runner, so check
+      # the thing that can actually go wrong instead: silently getting a host
+      # binary. Shipping an arm64 build under an x86_64 filename is worse than
+      # shipping nothing, because it fails on the user's machine rather than here.
+      - name: the cross-compiled binary is for the target it claims
+        if: ${{ !matrix.native }}
+        run: |
+          binary="target/${{ matrix.target }}/release/hcuda"
+          file "$binary"
+          lipo -archs "$binary"
+          test "$(lipo -archs "$binary")" = "x86_64"
+
+      # `tar.gz` on Unix to keep the executable bit, `zip` on Windows because
+      # that is what a Windows user can open without installing anything.
+      - name: package
+        shell: bash
+        run: |
+          mkdir -p release
+          name="hcuda-${{ github.event.release.tag_name }}-${{ matrix.target }}"
+          staging="release/$name"
+          mkdir -p "$staging"
+          cp README.md LICENSE CHANGELOG.md "$staging/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "target/${{ matrix.target }}/release/hcuda.exe" "$staging/"
+            (cd release && 7z a -tzip "$name.zip" "$name" >/dev/null)
+          else
+            cp "target/${{ matrix.target }}/release/hcuda" "$staging/"
+            (cd release && tar czf "$name.tar.gz" "$name")
+          fi
+          rm -rf "$staging"
+          ls -l release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.target }}
+          path: release/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # PyPI. Separate job with its own permissions so `id-token: write` is scoped to
+  # the one step that needs it, rather than granted to every build job above.
+  # ---------------------------------------------------------------------------
+  pypi:
+    name: publish to PyPI
+    needs: [universal, wheels]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/download-artifact@v8
         with:
-          python-version: "3.12"
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
 
-      - run: pip install build
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install twine
+      - run: python -m twine check --strict dist/*
 
-      - run: python -m build
+      # Five artifacts: four platform wheels and the universal one. Asserted
+      # rather than assumed, because `fail-fast: false` above means a single
+      # target can fail while the rest succeed — and uploading four of five to
+      # PyPI silently drops a platform for a version that can never be reissued.
+      - name: every expected artifact is present
+        run: |
+          python - <<'PY'
+          import pathlib, sys
+
+          expected = {
+              "macosx": "macOS",
+              "manylinux": "Linux",
+              "win_amd64": "Windows",
+              "py3-none-any": "universal",
+          }
+          wheels = sorted(p.name for p in pathlib.Path("dist").glob("*.whl"))
+          print("\n".join(wheels))
+
+          missing = [
+              label
+              for fragment, label in expected.items()
+              if not any(fragment in wheel for wheel in wheels)
+          ]
+          if missing:
+              sys.exit(f"no wheel for: {', '.join(missing)}")
+
+          arm = [w for w in wheels if "arm64" in w or "aarch64" in w]
+          intel = [w for w in wheels if "x86_64" in w and "macosx" in w]
+          if not arm or not intel:
+              sys.exit(f"expected both macOS architectures, got {wheels}")
+          if len(wheels) != 5:
+              sys.exit(f"expected 5 wheels, found {len(wheels)}: {wheels}")
+          if not list(pathlib.Path("dist").glob("*.tar.gz")):
+              sys.exit("no sdist")
+          PY
 
       # v1.12.3 bundled Twine 6, which rejects core metadata 2.5 with
-      # "InvalidDistribution: Make sure the distribution is using a
-      # supported Metadata-Version". Hatchling is unpinned in
-      # pyproject.toml's build requirements, so it started emitting 2.5 on
-      # its own and the v0.3.0 publish failed at the metadata check. This
-      # version bundles Twine 7, which accepts 2.5.
+      # "InvalidDistribution: Make sure the distribution is using a supported
+      # Metadata-Version". Hatchling was unpinned and started emitting 2.5 on its
+      # own, and the v0.3.0 publish failed at the metadata check. This version
+      # bundles Twine 7, which accepts 2.5. `pyproject.toml` now pins hatchling
+      # to a band that is known good against it.
       - uses: pypa/gh-action-pypi-publish@v1.14.2
+
+  # ---------------------------------------------------------------------------
+  # Attach the binaries and a checksum file to the GitHub Release.
+  # ---------------------------------------------------------------------------
+  attach:
+    name: attach binaries to the release
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: binary-*
+          path: release
+          merge-multiple: true
+
+      # One file over all four archives, so a user can verify a download without
+      # having to find the checksum for their specific platform.
+      - name: checksums
+        run: |
+          cd release
+          ls -l
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: release/*
+          # The notes are written by hand at release time. Appending would
+          # overwrite them with nothing.
+          append_body: false
+
+  # ---------------------------------------------------------------------------
+  # Mirror to Cloudflare R2. GitHub Releases is the source of truth; this is a
+  # second location to fetch from, keyed by tag.
+  # ---------------------------------------------------------------------------
+  mirror:
+    name: mirror artifacts to R2
+    needs: [pypi, attach]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: upload to R2
+        env:
+          # Every value comes from a secret. Nothing about the account or the
+          # bucket is written down in this file: an account ID in a public
+          # workflow is not a credential, but it is a free identifier for anyone
+          # enumerating targets, and a hardcoded bucket name is a config change
+          # that needs a commit.
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BUCKET: ${{ secrets.R2_BUCKET_NAME }}
+          TAG: ${{ github.event.release.tag_name }}
+          # R2 is S3-compatible but has no regions. The CLI still demands one.
+          AWS_DEFAULT_REGION: auto
+          # R2 does not implement the streaming checksum trailers that newer AWS
+          # CLI releases send by default, and an upload that omits this fails with
+          # a signature error rather than anything that names the cause.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          set -euo pipefail
+          if [ -z "$ACCOUNT_ID" ] || [ -z "$BUCKET" ]; then
+            echo "::error::CLOUDFLARE_ACCOUNT_ID or R2_BUCKET_NAME is not set"
+            exit 1
+          fi
+
+          cd artifacts
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+          # Keyed by tag and never overwritten in place, so a URL published in
+          # release notes keeps pointing at the bytes it pointed at originally.
+          aws s3 cp . "s3://$BUCKET/hydracuda/$TAG/" \
+            --endpoint-url "https://$ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --recursive \
+            --no-progress
+
+          echo "mirrored to s3://$BUCKET/hydracuda/$TAG/"
+          aws s3 ls "s3://$BUCKET/hydracuda/$TAG/" \
+            --endpoint-url "https://$ACCOUNT_ID.r2.cloudflarestorage.com"

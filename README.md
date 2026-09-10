@@ -212,8 +212,16 @@ cheap enough to run on every commit. The format is in
 
 The decision engine ships twice: a compiled Rust extension used when it is
 present, and the pure-Python engine used when it is not. Both are supported and
-both stay. Every command names the one it used on its first line, and
-`--engine python|rust` pins it, taking precedence over `HYDRACUDA_ENGINE`:
+both stay — the interpreter engine is a permanent fallback, not a deprecated path.
+
+`pip install hydracuda` picks the right one for you. From 0.5.0 there are wheels
+for macOS (Apple silicon and Intel), Linux x86\_64 and Windows x86\_64 carrying the
+compiled engine, plus a `py3-none-any` wheel that installs anywhere else and runs
+the pure-Python engine. **No install requires a Rust toolchain**, and the sdist is
+pure Python too, so building from source needs no `cargo` either.
+
+Every command names the engine it used on its first line, and `--engine
+python|rust` pins it, taking precedence over `HYDRACUDA_ENGINE`:
 
 ```bash
 hydracuda plan --engine python      # pin the interpreter, whatever is installed
@@ -232,13 +240,15 @@ have to install a Python package to check a policy file. Its output is
 byte-identical to `hydracuda`'s, and `tests/test_cli_parity.py` holds it to that
 by running both and diffing.
 
+Download it from the [releases page](https://github.com/Xtrinel-Group/HYDRACUDA/releases)
+— macOS (Apple silicon and Intel), Linux x86\_64, and Windows x86\_64, from 0.5.0
+onward, with a `SHA256SUMS` file covering all four. Or build it from a checkout:
+
 ```bash
 cargo build --release -p hydracuda-cli   # target/release/hcuda
 hcuda validate                           # same output, same exit codes
 hcuda test examples/policy.yaml
 ```
-
-Built from a checkout for now. Prebuilt binaries are not published yet.
 
 It is named `hcuda` rather than `hydracuda` because the Python package's console
 script already owns that name; two executables sharing it would resolve by `PATH`

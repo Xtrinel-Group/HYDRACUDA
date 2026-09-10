@@ -1,0 +1,137 @@
+name: CI
+
+# There was no CI workflow at all until 0.5.0. Every check in this file was a
+# check someone ran locally and remembered to run, which is the same as not
+# having it — the v0.3.0 publish failed on a metadata default that a `twine
+# check` in CI would have caught on the pull request that introduced it.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A force-push or a second push to the same PR makes the earlier run's answer
+# worthless, so stop paying for it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: pytest (${{ matrix.python-version }}, pure Python engine)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The declared floor and the current ceiling. `requires-python` says
+        # ">=3.10", and a floor nothing tests is a claim rather than a fact.
+        python-version: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      # Pinned, not left to chance: this job has no compiled extension, and the
+      # point of it is that the pure-Python engine is a supported path rather
+      # than a thing that happens to work where Rust is missing.
+      - run: python -m pytest -q
+        env:
+          HYDRACUDA_ENGINE: python
+
+  rust:
+    name: cargo fmt, clippy, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      # `-D warnings` because a lint that only prints is a lint that accumulates.
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+
+  both-engines:
+    name: both engines agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pip install -e ".[dev]" maturin
+
+      # The compiled engine and the standalone binary, so the tests that compare
+      # the two engines and the two CLIs have something to compare. Without this
+      # job those tests skip, and a skipped parity test is indistinguishable from
+      # a passing one in a summary.
+      - run: python scripts/build_extension.py --release
+      - run: cargo build --release -p hydracuda-cli --locked
+
+      - name: pytest with the compiled engine
+        run: python -m pytest -q
+        env:
+          HYDRACUDA_ENGINE: rust
+
+      - name: pytest with the pure-Python engine, same checkout
+        run: python -m pytest -q
+        env:
+          HYDRACUDA_ENGINE: python
+
+      # `tests/test_cli_parity.py` skips when the binary is absent, and a skipped
+      # parity test is indistinguishable from a passing one in a summary. Assert
+      # the binary is there, then run the three cross-implementation suites on
+      # their own so their result is not averaged into 400-odd other tests.
+      - name: the parity suites ran rather than skipped
+        run: |
+          test -x target/release/hcuda
+          python -m pytest -q -rs \
+            tests/test_cli_parity.py \
+            tests/test_backend_parity.py \
+            tests/test_differential.py
+
+  package:
+    name: build and check the distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+
+      # The check that would have caught the v0.3.0 publish failure: hatchling
+      # raised its default core metadata version and Twine refused the result,
+      # with no change to this repository. Running it here means a build
+      # dependency's new default is a red pull request, not a failed release.
+      - run: python -m build
+      - run: python -m twine check --strict dist/*
+
+      # A platform-specific binary inside a `py3-none-any` wheel installs on
+      # machines that cannot load it. `pyproject.toml` excludes it; this asserts
+      # the exclusion still works, because the release builds both wheels from
+      # one checkout and the compiled module is present when it does.
+      - name: the universal wheel is pure
+        run: |
+          python - <<'PY'
+          import glob, sys, zipfile
+
+          wheels = glob.glob("dist/*-py3-none-any.whl")
+          if len(wheels) != 1:
+              sys.exit(f"expected one universal wheel, found {wheels}")
+          with zipfile.ZipFile(wheels[0]) as archive:
+              binaries = [
+                  name
+                  for name in archive.namelist()
+                  if name.endswith((".so", ".pyd", ".dylib"))
+              ]
+          if binaries:
+              sys.exit(f"{wheels[0]} is tagged py3-none-any and contains {binaries}")
+          print(f"{wheels[0]}: no compiled artifacts")
+          PY
