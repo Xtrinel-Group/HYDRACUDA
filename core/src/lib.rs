@@ -61,8 +61,10 @@ pub mod conditions;
 pub mod difflib;
 pub mod engine;
 mod fnmatch;
+pub mod introspect;
 pub mod policy;
 pub mod regex_compat;
+pub mod test_cases;
 pub mod value;
 pub mod yaml;
 
@@ -71,9 +73,11 @@ pub use conditions::{
     matches_conditions, pattern_subsumes, resource_matches, ConditionError, Conditions,
 };
 pub use engine::{Decision, Fields, PolicyEngine};
+pub use introspect::{analyze, plan, Diagnostic, Level, PlanEntry, Report};
 pub use policy::{
     Action, AdapterSpec, Allow, LoadError, Mode, Policy, PolicyError, Rule, ToolPolicy,
 };
+pub use test_cases::{run_tests, CaseResult, Expect, Outcome, TestCase};
 pub use value::Value;
 pub use yaml::YamlError;
 

@@ -229,6 +229,261 @@ def test_plan_handles_the_advanced_example(monkeypatch, capsys, examples_dir):
     assert "github.issue.comment" in out
 
 
+# --- test ----------------------------------------------------------------
+
+
+@pytest.fixture
+def tested_policy(tmp_path):
+    """A policy with a `tests:` block covering a pass, a failure and a refusal."""
+    path = tmp_path / "tested.yaml"
+    path.write_text(
+        """
+version: 2
+adapters:
+  - name: local
+    type: local_tools
+    resources: [read_file, delete_record]
+rules:
+  - name: block-etc
+    resource: read_file
+    action: deny
+    where:
+      path: {matches: ['^/etc/']}
+  - name: allow-reads
+    resource: read_file
+    action: allow
+tests:
+  - name: etc-is-denied
+    resource: read_file
+    params: {path: /etc/passwd}
+    expect: deny
+    expect_rule: block-etc
+  - name: other-reads-are-allowed
+    resource: read_file
+    params: {path: /srv/notes.md}
+    expect: allow
+  - name: undeclared-is-refused
+    resource: chmod
+    expect: refused
+"""
+    )
+    return path
+
+
+def test_test_reports_every_case_and_a_count(monkeypatch, capsys, tested_policy):
+    assert run(monkeypatch, "test", str(tested_policy)) == 0
+    out = capsys.readouterr().out
+    assert "PASS" in out
+    assert "etc-is-denied" in out
+    assert "3 passed, 0 failed of 3 case(s)" in out
+
+
+def test_test_fails_naming_the_decision_that_was_produced(
+    monkeypatch, capsys, tested_policy
+):
+    tested_policy.write_text(
+        tested_policy.read_text().replace(
+            "expect_rule: block-etc", "expect_rule: allow-reads"
+        )
+    )
+
+    assert run(monkeypatch, "test", str(tested_policy)) == 1
+    out = capsys.readouterr().out
+    assert "FAIL" in out
+    assert "expected deny from 'allow-reads', got deny from 'block-etc'" in out
+    assert "2 passed, 1 failed of 3 case(s)" in out
+
+
+def test_test_stops_on_an_error_level_diagnostic(monkeypatch, capsys, tested_policy):
+    """A duplicate name makes per-case output unreadable, so nothing runs."""
+    tested_policy.write_text(
+        tested_policy.read_text().replace(
+            "name: other-reads-are-allowed", "name: etc-is-denied"
+        )
+    )
+
+    assert run(monkeypatch, "test", str(tested_policy)) == 1
+    out = capsys.readouterr().out
+    assert "test-duplicate-name" in out
+    assert "1 error(s). No cases were run." in out
+    assert "PASS" not in out
+
+
+def test_test_says_what_to_add_when_there_are_no_cases(
+    monkeypatch, capsys, policy_file
+):
+    assert run(monkeypatch, "test", str(policy_file)) == 0
+    assert "No test cases." in capsys.readouterr().out
+
+
+def test_test_reports_an_unbuildable_adapter_as_unsupported(
+    monkeypatch, capsys, tmp_path
+):
+    """A case nobody ran is not a case that succeeded.
+
+    This is the one thing the Python CLI can do that `hcuda` cannot: building an
+    adapter needs the type registry, which only this package has.
+    """
+    path = tmp_path / "unbuildable.yaml"
+    path.write_text(
+        """
+version: 2
+adapters:
+  - {name: local, type: local_tools, resources: [read_file], config: {roto: /tmp}}
+rules:
+  - {name: reads, resource: read_file, action: allow}
+tests:
+  - {name: reads-are-allowed, resource: read_file, expect: allow}
+"""
+    )
+
+    # `validate`-level errors stop the run first, which is the path a user hits.
+    assert run(monkeypatch, "test", str(path)) == 1
+    out = capsys.readouterr().out
+    assert "adapter-unbuildable" in out
+    assert "No cases were run." in out
+
+    # Reached only by a direct caller of `run_tests`, and reported rather than
+    # silently passed.
+    from hydracuda.introspect import UNSUPPORTED, run_tests
+    from hydracuda.policy import load_policy
+
+    results = run_tests(load_policy(str(path)))
+    assert [result.status for result in results] == [UNSUPPORTED]
+    assert not results[0].passed
+
+
+def test_test_writes_nothing(monkeypatch, tmp_path, tested_policy):
+    before = tested_policy.read_text()
+    run(monkeypatch, "test", str(tested_policy))
+
+    assert tested_policy.read_text() == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["tested.yaml"]
+
+
+# --- engine selection ----------------------------------------------------
+
+
+def test_every_introspection_command_states_the_engine(
+    monkeypatch, capsys, tested_policy
+):
+    for command in ("validate", "plan", "test"):
+        run(monkeypatch, command, str(tested_policy))
+        out = capsys.readouterr().out
+        assert "Engine: " in out, command
+        assert "Loader: python" in out, command
+
+
+def test_the_engine_flag_beats_the_environment_variable(
+    monkeypatch, capsys, tested_policy
+):
+    monkeypatch.setenv("HYDRACUDA_ENGINE", "rust")
+    assert run(monkeypatch, "validate", str(tested_policy), "--engine", "python") == 0
+    assert "Engine: python" in capsys.readouterr().out
+
+
+def test_an_unusable_engine_pin_is_an_error_not_a_fallback(
+    monkeypatch, capsys, tested_policy
+):
+    """A pin that cannot be honoured must fail rather than quietly use the other.
+
+    Silently falling back would mean a reproducibility run measured whichever
+    engine happened to be built, which is the failure the pin exists to prevent.
+    """
+    monkeypatch.setenv("HYDRACUDA_ENGINE", "haskell")
+    assert run(monkeypatch, "validate", str(tested_policy)) == 1
+    assert "error: engine" in capsys.readouterr().out
+
+
+def test_only_one_engine_runs_by_default(monkeypatch, capsys, tested_policy):
+    """The output names one engine, and it is the one that was asked for."""
+    monkeypatch.setenv("HYDRACUDA_ENGINE", "python")
+    run(monkeypatch, "test", str(tested_policy))
+    out = capsys.readouterr().out
+    assert "Engine: python" in out
+    assert "Engine: rust" not in out
+    assert "Both engines agree" not in out
+
+
+def test_compare_engines_reports_agreement(monkeypatch, capsys, tested_policy):
+    if not cli.rust_available():
+        pytest.skip("the compiled engine is not built in this environment")
+
+    assert run(monkeypatch, "test", str(tested_policy), "--compare-engines") == 0
+    out = capsys.readouterr().out
+    assert "Both engines agree (exit 0)." in out
+
+
+def test_compare_engines_keeps_the_policy_exit_status_when_they_agree(
+    monkeypatch, capsys, tested_policy
+):
+    """Agreement is not success: a failing case still exits 1."""
+    if not cli.rust_available():
+        pytest.skip("the compiled engine is not built in this environment")
+
+    tested_policy.write_text(
+        tested_policy.read_text().replace("expect: allow", "expect: review")
+    )
+
+    assert run(monkeypatch, "test", str(tested_policy), "--compare-engines") == 1
+    assert "Both engines agree (exit 1)." in capsys.readouterr().out
+
+
+def test_compare_engines_needs_both_engines(monkeypatch, capsys, tested_policy):
+    monkeypatch.setattr(cli, "rust_available", lambda: False)
+
+    assert run(monkeypatch, "validate", str(tested_policy), "--compare-engines") == 1
+    assert "there is only one to run" in capsys.readouterr().out
+
+
+def test_a_divergence_exits_distinctly_from_a_policy_failure(
+    monkeypatch, capsys, tested_policy
+):
+    """The exit code has to tell "your policy is wrong" from "we are broken".
+
+    Forced rather than found, because a real divergence is a bug the differential
+    corpus is there to prevent — but the reporting path still has to work the day
+    one appears.
+    """
+    monkeypatch.setattr(cli, "rust_available", lambda: True)
+    outputs = iter(["Engine: python\nsame\ndiffers-python\n", "Engine: rust\nsame\ndiffers-rust\n"])
+
+    def fake_command(args):
+        print(next(outputs), end="")
+        return 0
+
+    assert cli._compare_engines(fake_command, object()) == cli.ENGINE_DIVERGENCE_EXIT
+    out = capsys.readouterr().out
+    assert "The engines disagree." in out
+    assert "-differs-python" in out
+    assert "+differs-rust" in out
+    # The header names the engine, so it differs by construction and must not be
+    # what the diff reports.
+    assert "-Engine: python" not in out
+
+
+def test_a_differing_exit_status_is_a_divergence_too(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "rust_available", lambda: True)
+    statuses = iter([0, 1])
+
+    def fake_command(args):
+        print("identical output")
+        return next(statuses)
+
+    assert cli._compare_engines(fake_command, object()) == cli.ENGINE_DIVERGENCE_EXIT
+    assert "exit status: python 0, rust 1" in capsys.readouterr().out
+
+
+def test_init_needs_no_engine(monkeypatch, capsys, tmp_path):
+    """`init` evaluates nothing, so an unusable pin must not block it."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HYDRACUDA_ENGINE", "haskell")
+
+    assert run(monkeypatch, "init") == 0
+    assert (tmp_path / "hydracuda.yaml").exists()
+    capsys.readouterr()
+
+
 # --- read-only -----------------------------------------------------------
 
 

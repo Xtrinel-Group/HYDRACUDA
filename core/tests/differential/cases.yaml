@@ -346,6 +346,73 @@ policies:
     requests:
       - resource: fs.read
 
+  # `tests:` blocks. Recorded per case as pass/fail plus the failure text, because
+  # `hcuda test` is a second implementation of the runner and a runner that
+  # disagrees about which case failed is as bad as one that disagrees about a
+  # decision. Every case here builds its adapters successfully — the one class the
+  # recording cannot cover is an unbuildable adapter, which only the Python runner
+  # can detect at all.
+  - name: tests-pass-and-fail
+    policy: |
+      version: 2
+      adapters:
+        - name: local
+          type: local_tools
+          resources: [fs.read, fs.write]
+          config: {root: /workspace}
+      rules:
+        - {name: block-etc, resource: fs.read, action: deny, where: {path: {matches: ['^/etc/']}}}
+        - {name: reads, resource: fs.read, action: allow}
+        - {name: writes, resource: fs.write, action: review}
+      tests:
+        - {name: etc-is-denied, resource: fs.read, params: {path: /etc/passwd}, expect: deny, expect_rule: block-etc}
+        - {name: workspace-is-allowed, resource: fs.read, params: {path: /workspace/a}, expect: allow, expect_rule: reads}
+        - {name: writes-are-reviewed, resource: fs.write, expect: review}
+        - {name: wrong-action, resource: fs.write, expect: allow}
+        - {name: right-answer-wrong-rule, resource: fs.read, params: {path: /etc/passwd}, expect: deny, expect_rule: reads}
+        - {name: undeclared-is-refused, resource: fs.chmod, expect: refused}
+        - {name: undeclared-cannot-be-allowed, resource: fs.chmod, expect: allow}
+        # Declared, so the boundary lets it through: an adapter built from a
+        # policy file declares no `path_parameters` and therefore canonicalizes
+        # nothing, which makes this the only refusal a policy file can express.
+        - {name: declared-is-never-refused, resource: fs.read, params: {path: ../etc/passwd}, expect: refused}
+    requests:
+      - {resource: fs.read, params: {path: /workspace/a}}
+
+  - name: tests-produce-diagnostics-of-their-own
+    policy: |
+      version: 2
+      pinned_context: [environment]
+      adapters:
+        - {name: local, type: local_tools, resources: [fs.read], config: {root: /workspace}}
+      rules:
+        - name: prod-reads
+          resource: fs.read
+          action: deny
+          when: {environment: {equals: prod}}
+      tests:
+        - {name: dup, resource: fs.read, expect: deny, context: {environment: prod}}
+        - {name: dup, resource: 'fs.*', expect: deny, context: {environment: prod}}
+        - {name: no-pinned-context, resource: fs.read, expect: deny}
+        - {name: typo-field, resource: fs.read, expect: deny, context: {environment: prod, enviroment: prod}}
+    requests:
+      - {resource: fs.read, context: {environment: prod}}
+      - {resource: fs.read, context: {environment: dev}}
+
+  - name: tests-without-adapters-have-no-boundary
+    policy: |
+      version: 2
+      default_action: allow
+      rules:
+        - {name: reads, resource: fs.read, action: allow}
+      tests:
+        - {name: evaluated, resource: fs.read, expect: allow, expect_rule: reads}
+        - {name: refusal-is-impossible, resource: fs.read, expect: refused}
+        - {name: unknown-resource-still-reaches-the-rules, resource: fs.chmod, expect: allow}
+    requests:
+      - {resource: fs.read}
+      - {resource: fs.chmod}
+
   - name: version-1-translates-to-ordered-rules
     policy: |
       version: 1
@@ -406,11 +473,41 @@ policies:
       version: 2
       rate_limit: 10
       rules: []
-  - name: error-tests-block-is-not-recognized-yet
+  - name: error-tests-block-is-version-2-only
+    policy: |
+      version: 1
+      tools: {}
+      tests: []
+  - name: error-test-without-a-name
     policy: |
       version: 2
       rules: []
-      tests: []
+      tests:
+        - {resource: fs.read, expect: allow}
+  - name: error-test-without-a-resource
+    policy: |
+      version: 2
+      rules: []
+      tests:
+        - {name: a, expect: allow}
+  - name: error-test-with-a-bad-expectation
+    policy: |
+      version: 2
+      rules: []
+      tests:
+        - {name: a, resource: fs.read, expect: maybe}
+  - name: error-test-with-an-unknown-key
+    policy: |
+      version: 2
+      rules: []
+      tests:
+        - {name: a, resource: fs.read, expect: allow, expectRule: r}
+  - name: error-test-params-is-not-a-mapping
+    policy: |
+      version: 2
+      rules: []
+      tests:
+        - {name: a, resource: fs.read, expect: allow, params: 'nope'}
   - name: error-missing-version
     policy: |
       rules: []

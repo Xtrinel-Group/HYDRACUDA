@@ -14,12 +14,21 @@ from hydracuda.adapters.local_tools import LocalToolsAdapter
 from hydracuda.adapters.registry import build_adapter, register_adapter_type
 from hydracuda.canonical import CanonicalizationError, canonicalize_path
 from hydracuda.engine import Decision, PolicyEngine
-from hydracuda.introspect import Diagnostic, PlanEntry, Report, analyze, plan
+from hydracuda.introspect import (
+    CaseResult,
+    Diagnostic,
+    PlanEntry,
+    Report,
+    analyze,
+    plan,
+    run_tests,
+)
 from hydracuda.policy import (
     AdapterSpec,
     Policy,
     PolicyError,
     Rule,
+    TestCase,
     ToolPolicy,
     load_policy,
     parse_policy,
@@ -31,6 +40,7 @@ __all__ = [
     "AdapterError",
     "AdapterSpec",
     "CanonicalizationError",
+    "CaseResult",
     "ContextError",
     "Decision",
     "Diagnostic",
@@ -44,6 +54,7 @@ __all__ = [
     "ResourceSpec",
     "ReviewRequired",
     "Rule",
+    "TestCase",
     "ToolCallProxy",
     "ToolPolicy",
     "UndeclaredResource",
@@ -56,4 +67,5 @@ __all__ = [
     "parse_policy",
     "plan",
     "register_adapter_type",
+    "run_tests",
 ]

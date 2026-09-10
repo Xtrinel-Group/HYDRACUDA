@@ -35,7 +35,14 @@ import yaml  # noqa: E402
 
 from hydracuda._backend import use_backend  # noqa: E402
 from hydracuda.engine import PolicyEngine  # noqa: E402
+from hydracuda.introspect import analyze, plan, run_tests  # noqa: E402
 from hydracuda.policy import PolicyError, parse_policy  # noqa: E402
+
+#: The one diagnostic the Rust crate cannot produce, because it has no adapter
+#: registry to try `build_adapter` against — see `core/src/introspect.rs`. Dropped
+#: from the recording rather than special-cased on the Rust side, so the gap is
+#: written down once and everything else is compared strictly.
+UNPORTABLE_DIAGNOSTICS = {"adapter-unbuildable"}
 
 
 def normalize_error(message: str) -> str:
@@ -100,12 +107,19 @@ def record_policy(case: dict[str, Any]) -> dict[str, Any]:
     except PolicyError as exc:
         return {"name": name, "load_error": normalize_error(str(exc))}
 
-    # Explicitly the Python engine. This file is the record of what Python
-    # decides, and `PolicyEngine` uses the compiled engine by default wherever it
-    # is built — which would make the golden file a recording of Rust and
-    # `core/tests/differential.rs` a comparison of Rust against itself.
+    # Explicitly the Python engine, for the whole recording rather than just the
+    # engine on the next line. This file is the record of what Python decides, and
+    # `PolicyEngine` uses the compiled engine by default wherever it is built —
+    # including inside `plan` and `run_tests`, which construct their own. Without
+    # the pin the golden file becomes a recording of Rust and
+    # `core/tests/differential.rs` becomes a comparison of Rust against itself.
     with use_backend("python"):
-        engine = PolicyEngine(policy)
+        return record_loaded(name, case, policy)
+
+
+def record_loaded(name: str, case: dict[str, Any], policy: Any) -> dict[str, Any]:
+    """Everything a policy that loaded produces. Call inside ``use_backend``."""
+    engine = PolicyEngine(policy)
     decisions = []
     for request in case.get("requests") or []:
         decision = engine.evaluate(
@@ -139,7 +153,46 @@ def record_policy(case: dict[str, Any]) -> dict[str, Any]:
             "declared_resources": policy.declared_resources(),
         },
         "decisions": decisions,
+        "diagnostics": record_diagnostics(policy),
+        # `plan` and `test` are recorded because `hcuda` is a second
+        # implementation of both, and a CLI that agrees on every decision while
+        # disagreeing about which resources exist or which cases pass is still two
+        # tools telling one policy author different things.
+        "plan": [
+            {
+                "resource": entry.resource,
+                "action": entry.action,
+                "rule": entry.rule,
+                "reason": entry.reason,
+                "conditional_rules": list(entry.conditional_rules),
+            }
+            for entry in plan(policy)
+        ],
+        "tests": [
+            {
+                "name": result.name,
+                "resource": result.resource,
+                "expect": result.expect,
+                "status": result.status,
+                "detail": result.detail,
+            }
+            for result in run_tests(policy)
+        ],
     }
+
+
+def record_diagnostics(policy: Any) -> list[dict[str, Any]]:
+    """`validate`'s findings, minus the one Rust structurally cannot produce."""
+    return [
+        {
+            "level": diagnostic.level,
+            "code": diagnostic.code,
+            "location": diagnostic.location,
+            "message": diagnostic.message,
+        }
+        for diagnostic in analyze(policy).diagnostics
+        if diagnostic.code not in UNPORTABLE_DIAGNOSTICS
+    ]
 
 
 def record() -> dict[str, Any]:

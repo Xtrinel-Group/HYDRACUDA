@@ -386,6 +386,76 @@
           "blocked": true
         }
       ],
+      "diagnostics": [],
+      "plan": [
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "rule": "allow-file-reads",
+          "reason": "all policy checks passed",
+          "conditional_rules": [
+            "block-sensitive-paths"
+          ]
+        },
+        {
+          "resource": "delete_record",
+          "action": "deny",
+          "rule": "block-destructive-deletes",
+          "reason": "Destructive operation. Blocked by default.",
+          "conditional_rules": []
+        },
+        {
+          "resource": "execute_shell",
+          "action": "review",
+          "rule": "shell-requires-approval",
+          "reason": "tool requires human review",
+          "conditional_rules": []
+        }
+      ],
+      "tests": [
+        {
+          "name": "an-ordinary-read-is-allowed",
+          "resource": "read_file",
+          "expect": "allow",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "traversal-is-denied",
+          "resource": "read_file",
+          "expect": "deny",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "system-paths-are-denied",
+          "resource": "read_file",
+          "expect": "deny",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "deletes-are-denied",
+          "resource": "delete_record",
+          "expect": "deny",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "the-shell-is-held-for-review",
+          "resource": "execute_shell",
+          "expect": "review",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "an-undeclared-tool-is-refused",
+          "resource": "write_file",
+          "expect": "refused",
+          "status": "pass",
+          "detail": ""
+        }
+      ],
       "path": "examples/policy.yaml"
     },
     {
@@ -485,6 +555,35 @@
           "blocked": true
         }
       ],
+      "diagnostics": [],
+      "plan": [
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "rule": "legacy:read_file:allow",
+          "reason": "all policy checks passed",
+          "conditional_rules": [
+            "legacy:read_file:path:deny_pattern[0]",
+            "legacy:read_file:path:deny_pattern[1]",
+            "legacy:read_file:path:deny_pattern[2]"
+          ]
+        },
+        {
+          "resource": "delete_record",
+          "action": "deny",
+          "rule": "legacy:delete_record:blocked",
+          "reason": "Destructive operation. Blocked by default.",
+          "conditional_rules": []
+        },
+        {
+          "resource": "execute_shell",
+          "action": "review",
+          "rule": "legacy:execute_shell:review",
+          "reason": "tool requires human review",
+          "conditional_rules": []
+        }
+      ],
+      "tests": [],
       "path": "examples/policy-v1-legacy.yaml"
     },
     {
@@ -636,6 +735,79 @@
           "blocked": false
         }
       ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "shadow-mode",
+          "location": "mode",
+          "message": "`mode: shadow` computes and logs every decision but executes the call regardless. This policy enforces nothing."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "filesystem.read_file",
+          "action": "allow",
+          "rule": "allow-filesystem",
+          "reason": "all policy checks passed",
+          "conditional_rules": [
+            "untrusted-agents-read-only",
+            "untrusted-agents-must-state-a-mode"
+          ]
+        },
+        {
+          "resource": "filesystem.write_file",
+          "action": "deny",
+          "rule": "writes-must-state-a-path",
+          "reason": "a write must state the path it targets",
+          "conditional_rules": [
+            "untrusted-agents-read-only",
+            "untrusted-agents-must-state-a-mode",
+            "no-writes-outside-workspace",
+            "writes-must-state-a-path"
+          ]
+        },
+        {
+          "resource": "filesystem.delete_file",
+          "action": "review",
+          "rule": "deletes-need-approval",
+          "reason": "tool requires human review",
+          "conditional_rules": [
+            "untrusted-agents-read-only",
+            "untrusted-agents-must-state-a-mode"
+          ]
+        },
+        {
+          "resource": "github.repository.read",
+          "action": "allow",
+          "rule": "github-reads-allowed",
+          "reason": "all policy checks passed",
+          "conditional_rules": [
+            "untrusted-agents-read-only",
+            "untrusted-agents-must-state-a-mode"
+          ]
+        },
+        {
+          "resource": "github.repository.write",
+          "action": "review",
+          "rule": "github-writes-need-approval",
+          "reason": "tool requires human review",
+          "conditional_rules": [
+            "untrusted-agents-read-only",
+            "untrusted-agents-must-state-a-mode"
+          ]
+        },
+        {
+          "resource": "github.issue.comment",
+          "action": "review",
+          "rule": "github-writes-need-approval",
+          "reason": "tool requires human review",
+          "conditional_rules": [
+            "untrusted-agents-read-only",
+            "untrusted-agents-must-state-a-mode"
+          ]
+        }
+      ],
+      "tests": [],
       "path": "examples/policy-advanced.yaml"
     }
   ],
@@ -672,7 +844,17 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "no-rules",
+          "location": "rules",
+          "message": "the policy declares no rules, so every request falls through to `default_action: deny`."
+        }
+      ],
+      "plan": [],
+      "tests": []
     },
     {
       "name": "first-match-wins",
@@ -729,7 +911,25 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "unreachable-rule",
+          "location": "rules[1] narrow",
+          "message": "rules[0] broad matches 'fs.read' unconditionally and decides 'allow', so this rule is never reached. Move it above rules[0]."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "rule": "broad",
+          "reason": "all policy checks passed",
+          "conditional_rules": []
+        }
+      ],
+      "tests": []
     },
     {
       "name": "resource-wildcards",
@@ -830,7 +1030,17 @@
           "enforced": true,
           "blocked": false
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "default-allow",
+          "location": "default_action",
+          "message": "`default_action: allow` means a resource no rule mentions is permitted, so adding a tool without adding a rule fails open."
+        }
+      ],
+      "plan": [],
+      "tests": []
     },
     {
       "name": "where-and-when-must-both-hold",
@@ -899,7 +1109,33 @@
           "enforced": true,
           "blocked": false
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "unpinned-when-field",
+          "location": "rules[0] block-etc-in-prod",
+          "message": "tests context field(s) ['environment'], which are not listed in `pinned_context`. Those values are supplied per call, so this rule can only be trusted if the calling code never derives them from model output. Add them to `pinned_context` to make HYDRACUDA enforce that."
+        },
+        {
+          "level": "warning",
+          "code": "default-allow",
+          "location": "default_action",
+          "message": "`default_action: allow` means a resource no rule mentions is permitted, so adding a tool without adding a rule fails open."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "rule": null,
+          "reason": "fs.read: no matching rule — default allow",
+          "conditional_rules": [
+            "block-etc-in-prod"
+          ]
+        }
+      ],
+      "tests": []
     },
     {
       "name": "every-operator",
@@ -1198,7 +1434,126 @@
           "enforced": true,
           "blocked": false
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "negative-condition-fails-open",
+          "location": "rules[1] ne",
+          "message": "where.v (not_equals): an absent field satisfies no value operator, so this 'deny' rule does not fire on a request that omits the field entirely. Cover that case with a separate 'deny' rule testing `absent: true` on the same field. Adding `present: true` here documents the intent but changes nothing — conditions are ANDed, so the rule still needs the field to be there."
+        },
+        {
+          "level": "warning",
+          "code": "negative-condition-fails-open",
+          "location": "rules[3] nin",
+          "message": "where.v (not_in): an absent field satisfies no value operator, so this 'deny' rule does not fire on a request that omits the field entirely. Cover that case with a separate 'deny' rule testing `absent: true` on the same field. Adding `present: true` here documents the intent but changes nothing — conditions are ANDed, so the rule still needs the field to be there."
+        },
+        {
+          "level": "warning",
+          "code": "negative-condition-fails-open",
+          "location": "rules[5] nm",
+          "message": "where.v (not_matches): an absent field satisfies no value operator, so this 'deny' rule does not fire on a request that omits the field entirely. Cover that case with a separate 'deny' rule testing `absent: true` on the same field. Adding `present: true` here documents the intent but changes nothing — conditions are ANDed, so the rule still needs the field to be there."
+        },
+        {
+          "level": "warning",
+          "code": "default-allow",
+          "location": "default_action",
+          "message": "`default_action: allow` means a resource no rule mentions is permitted, so adding a tool without adding a rule fails open."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "op.eq",
+          "action": "allow",
+          "rule": null,
+          "reason": "op.eq: no matching rule — default allow",
+          "conditional_rules": [
+            "eq"
+          ]
+        },
+        {
+          "resource": "op.ne",
+          "action": "allow",
+          "rule": null,
+          "reason": "op.ne: no matching rule — default allow",
+          "conditional_rules": [
+            "ne"
+          ]
+        },
+        {
+          "resource": "op.in",
+          "action": "allow",
+          "rule": null,
+          "reason": "op.in: no matching rule — default allow",
+          "conditional_rules": [
+            "in"
+          ]
+        },
+        {
+          "resource": "op.nin",
+          "action": "allow",
+          "rule": null,
+          "reason": "op.nin: no matching rule — default allow",
+          "conditional_rules": [
+            "nin"
+          ]
+        },
+        {
+          "resource": "op.m",
+          "action": "allow",
+          "rule": null,
+          "reason": "op.m: no matching rule — default allow",
+          "conditional_rules": [
+            "m"
+          ]
+        },
+        {
+          "resource": "op.nm",
+          "action": "allow",
+          "rule": null,
+          "reason": "op.nm: no matching rule — default allow",
+          "conditional_rules": [
+            "nm"
+          ]
+        },
+        {
+          "resource": "op.p",
+          "action": "allow",
+          "rule": null,
+          "reason": "op.p: no matching rule — default allow",
+          "conditional_rules": [
+            "p"
+          ]
+        },
+        {
+          "resource": "op.np",
+          "action": "deny",
+          "rule": "np",
+          "reason": "tool blocked by policy",
+          "conditional_rules": [
+            "np"
+          ]
+        },
+        {
+          "resource": "op.a",
+          "action": "deny",
+          "rule": "a",
+          "reason": "tool blocked by policy",
+          "conditional_rules": [
+            "a"
+          ]
+        },
+        {
+          "resource": "op.na",
+          "action": "allow",
+          "rule": null,
+          "reason": "op.na: no matching rule — default allow",
+          "conditional_rules": [
+            "na"
+          ]
+        }
+      ],
+      "tests": []
     },
     {
       "name": "matches-stringifies-the-value",
@@ -1307,7 +1662,63 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "default-allow",
+          "location": "default_action",
+          "message": "`default_action: allow` means a resource no rule mentions is permitted, so adding a tool without adding a rule fails open."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "s.bool",
+          "action": "allow",
+          "rule": null,
+          "reason": "s.bool: no matching rule — default allow",
+          "conditional_rules": [
+            "t"
+          ]
+        },
+        {
+          "resource": "s.null",
+          "action": "allow",
+          "rule": null,
+          "reason": "s.null: no matching rule — default allow",
+          "conditional_rules": [
+            "n"
+          ]
+        },
+        {
+          "resource": "s.float",
+          "action": "allow",
+          "rule": null,
+          "reason": "s.float: no matching rule — default allow",
+          "conditional_rules": [
+            "f"
+          ]
+        },
+        {
+          "resource": "s.list",
+          "action": "allow",
+          "rule": null,
+          "reason": "s.list: no matching rule — default allow",
+          "conditional_rules": [
+            "l"
+          ]
+        },
+        {
+          "resource": "s.dict",
+          "action": "allow",
+          "rule": null,
+          "reason": "s.dict: no matching rule — default allow",
+          "conditional_rules": [
+            "d"
+          ]
+        }
+      ],
+      "tests": []
     },
     {
       "name": "shadow-mode-does-not-enforce",
@@ -1367,7 +1778,39 @@
           "enforced": false,
           "blocked": false
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "shadow-mode",
+          "location": "mode",
+          "message": "`mode: shadow` computes and logs every decision but executes the call regardless. This policy enforces nothing."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "rule": "d",
+          "reason": "tool blocked by policy",
+          "conditional_rules": []
+        },
+        {
+          "resource": "fs.stat",
+          "action": "review",
+          "rule": "r",
+          "reason": "tool requires human review",
+          "conditional_rules": []
+        },
+        {
+          "resource": "fs.write",
+          "action": "allow",
+          "rule": "a",
+          "reason": "all policy checks passed",
+          "conditional_rules": []
+        }
+      ],
+      "tests": []
     },
     {
       "name": "review-mode-enforces",
@@ -1396,7 +1839,18 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "rule": "d",
+          "reason": "tool blocked by policy",
+          "conditional_rules": []
+        }
+      ],
+      "tests": []
     },
     {
       "name": "default-reason-is-a-template",
@@ -1421,7 +1875,17 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "no-rules",
+          "location": "rules",
+          "message": "the policy declares no rules, so every request falls through to `default_action: review`."
+        }
+      ],
+      "plan": [],
+      "tests": []
     },
     {
       "name": "default-reason-that-cannot-be-formatted",
@@ -1446,7 +1910,17 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "no-rules",
+          "location": "rules",
+          "message": "the policy declares no rules, so every request falls through to `default_action: deny`."
+        }
+      ],
+      "plan": [],
+      "tests": []
     },
     {
       "name": "audit-and-pinned-context",
@@ -1489,7 +1963,33 @@
           "enforced": true,
           "blocked": false
         }
-      ]
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "unpinned-when-field",
+          "location": "rules[0] r",
+          "message": "tests context field(s) ['agent'], which are not listed in `pinned_context`. Those values are supplied per call, so this rule can only be trusted if the calling code never derives them from model output. Add them to `pinned_context` to make HYDRACUDA enforce that."
+        },
+        {
+          "level": "warning",
+          "code": "default-allow",
+          "location": "default_action",
+          "message": "`default_action: allow` means a resource no rule mentions is permitted, so adding a tool without adding a rule fails open."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "rule": null,
+          "reason": "fs.read: no matching rule — default allow",
+          "conditional_rules": [
+            "r"
+          ]
+        }
+      ],
+      "tests": []
     },
     {
       "name": "adapters-declare-the-surface",
@@ -1518,6 +2018,331 @@
           "mode": "enforce",
           "enforced": true,
           "blocked": false
+        }
+      ],
+      "diagnostics": [],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "rule": "r",
+          "reason": "all policy checks passed",
+          "conditional_rules": []
+        },
+        {
+          "resource": "fs.write",
+          "action": "allow",
+          "rule": "r",
+          "reason": "all policy checks passed",
+          "conditional_rules": []
+        }
+      ],
+      "tests": []
+    },
+    {
+      "name": "tests-pass-and-fail",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "block-etc",
+          "reads",
+          "writes"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "fs.read",
+          "fs.write"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "reads",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        }
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "test-undeclared-resource",
+          "location": "tests[6] undeclared-cannot-be-allowed",
+          "message": "no adapter declares 'fs.chmod', so it is refused at the adapter boundary before any rule is consulted and this case cannot pass. Add it to an adapter's `resources`, or expect `refused`."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "rule": "reads",
+          "reason": "all policy checks passed",
+          "conditional_rules": [
+            "block-etc"
+          ]
+        },
+        {
+          "resource": "fs.write",
+          "action": "review",
+          "rule": "writes",
+          "reason": "tool requires human review",
+          "conditional_rules": []
+        }
+      ],
+      "tests": [
+        {
+          "name": "etc-is-denied",
+          "resource": "fs.read",
+          "expect": "deny",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "workspace-is-allowed",
+          "resource": "fs.read",
+          "expect": "allow",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "writes-are-reviewed",
+          "resource": "fs.write",
+          "expect": "review",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "wrong-action",
+          "resource": "fs.write",
+          "expect": "allow",
+          "status": "fail",
+          "detail": "expected allow, got review from writes"
+        },
+        {
+          "name": "right-answer-wrong-rule",
+          "resource": "fs.read",
+          "expect": "deny",
+          "status": "fail",
+          "detail": "expected deny from 'reads', got deny from 'block-etc'"
+        },
+        {
+          "name": "undeclared-is-refused",
+          "resource": "fs.chmod",
+          "expect": "refused",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "undeclared-cannot-be-allowed",
+          "resource": "fs.chmod",
+          "expect": "allow",
+          "status": "fail",
+          "detail": "expected allow, got refused — no adapter declares 'fs.chmod'"
+        },
+        {
+          "name": "declared-is-never-refused",
+          "resource": "fs.read",
+          "expect": "refused",
+          "status": "fail",
+          "detail": "expected refused, got allow from reads"
+        }
+      ]
+    },
+    {
+      "name": "tests-produce-diagnostics-of-their-own",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "prod-reads"
+        ],
+        "when_fields": [
+          "environment"
+        ],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "fs.read"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "prod-reads",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "fs.read: no matching rule — default deny",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ],
+      "diagnostics": [
+        {
+          "level": "error",
+          "code": "test-duplicate-name",
+          "location": "tests[1] dup",
+          "message": "the case at tests[0] has the same name; the output is per-case pass/fail, so two cases sharing a name make that report unreadable"
+        },
+        {
+          "level": "error",
+          "code": "test-resource-is-a-pattern",
+          "location": "tests[1] dup",
+          "message": "resource 'fs.*' contains a wildcard. A test case asserts one request, so `resource` is an exact name — use one case per resource the pattern covers."
+        },
+        {
+          "level": "warning",
+          "code": "test-undeclared-resource",
+          "location": "tests[1] dup",
+          "message": "no adapter declares 'fs.*', so it is refused at the adapter boundary before any rule is consulted and this case cannot pass. Add it to an adapter's `resources`, or expect `refused`."
+        },
+        {
+          "level": "warning",
+          "code": "test-missing-pinned-context",
+          "location": "tests[2] no-pinned-context",
+          "message": "`pinned_context` names ['environment'], which this case does not set. Context construction fails without a pinned field at runtime, so the case is evaluating a state that cannot occur."
+        },
+        {
+          "level": "warning",
+          "code": "test-unread-context-field",
+          "location": "tests[3] typo-field",
+          "message": "sets context field(s) ['enviroment'], which no rule's `when` block reads. Usually a typo, and a typo'd field name makes the case assert something other than what it appears to."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "rule": null,
+          "reason": "fs.read: no matching rule — default deny",
+          "conditional_rules": [
+            "prod-reads"
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "name": "dup",
+          "resource": "fs.read",
+          "expect": "deny",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "dup",
+          "resource": "fs.*",
+          "expect": "deny",
+          "status": "fail",
+          "detail": "expected deny, got refused — no adapter declares 'fs.*'"
+        },
+        {
+          "name": "no-pinned-context",
+          "resource": "fs.read",
+          "expect": "deny",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "typo-field",
+          "resource": "fs.read",
+          "expect": "deny",
+          "status": "pass",
+          "detail": ""
+        }
+      ]
+    },
+    {
+      "name": "tests-without-adapters-have-no-boundary",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "allow",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "reads"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "fs.read"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "reads",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "fs.chmod",
+          "action": "allow",
+          "reason": "fs.chmod: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        }
+      ],
+      "diagnostics": [
+        {
+          "level": "warning",
+          "code": "default-allow",
+          "location": "default_action",
+          "message": "`default_action: allow` means a resource no rule mentions is permitted, so adding a tool without adding a rule fails open."
+        }
+      ],
+      "plan": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "rule": "reads",
+          "reason": "all policy checks passed",
+          "conditional_rules": []
+        }
+      ],
+      "tests": [
+        {
+          "name": "evaluated",
+          "resource": "fs.read",
+          "expect": "allow",
+          "status": "pass",
+          "detail": ""
+        },
+        {
+          "name": "refusal-is-impossible",
+          "resource": "fs.read",
+          "expect": "refused",
+          "status": "fail",
+          "detail": "expected refused, but the policy declares no adapters, so there is no boundary to refuse at and every request reaches the rules"
+        },
+        {
+          "name": "unknown-resource-still-reaches-the-rules",
+          "resource": "fs.chmod",
+          "expect": "allow",
+          "status": "pass",
+          "detail": ""
         }
       ]
     },
@@ -1619,7 +2444,42 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [],
+      "plan": [
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "rule": "legacy:read_file:allow",
+          "reason": "all policy checks passed",
+          "conditional_rules": [
+            "legacy:read_file:path:deny_pattern[0]",
+            "legacy:read_file:path:deny_pattern[1]"
+          ]
+        },
+        {
+          "resource": "write_file",
+          "action": "deny",
+          "rule": "legacy:write_file:blocked",
+          "reason": "writes are off",
+          "conditional_rules": []
+        },
+        {
+          "resource": "review_file",
+          "action": "review",
+          "rule": "legacy:review_file:review",
+          "reason": "tool requires human review",
+          "conditional_rules": []
+        },
+        {
+          "resource": "run",
+          "action": "allow",
+          "rule": "legacy:run:allow",
+          "reason": "all policy checks passed",
+          "conditional_rules": []
+        }
+      ],
+      "tests": []
     },
     {
       "name": "version-1-allow-no-is-a-yaml-boolean",
@@ -1648,7 +2508,18 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [],
+      "plan": [
+        {
+          "resource": "t",
+          "action": "deny",
+          "rule": "legacy:t:blocked",
+          "reason": "tool blocked by policy",
+          "conditional_rules": []
+        }
+      ],
+      "tests": []
     },
     {
       "name": "version-1-empty-reason-falls-back-to-the-action",
@@ -1677,23 +2548,54 @@
           "enforced": true,
           "blocked": true
         }
-      ]
+      ],
+      "diagnostics": [],
+      "plan": [
+        {
+          "resource": "t",
+          "action": "deny",
+          "rule": "legacy:t:blocked",
+          "reason": "tool blocked by policy",
+          "conditional_rules": []
+        }
+      ],
+      "tests": []
     },
     {
       "name": "error-unknown-top-level-key",
-      "load_error": "Policy file: unrecognized key(s) ['rulez']. 'rulez' — did you mean 'rules'? Allowed: ['adapters', 'audit', 'audit_path', 'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'version']"
+      "load_error": "Policy file: unrecognized key(s) ['rulez']. 'rulez' — did you mean 'rules'? Allowed: ['adapters', 'audit', 'audit_path', 'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'tests', 'version']"
     },
     {
       "name": "error-camel-case-drift",
-      "load_error": "Policy file: unrecognized key(s) ['defaultAction']. 'defaultAction' — did you mean 'default_action'? Allowed: ['adapters', 'audit', 'audit_path', 'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'version']"
+      "load_error": "Policy file: unrecognized key(s) ['defaultAction']. 'defaultAction' — did you mean 'default_action'? Allowed: ['adapters', 'audit', 'audit_path', 'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'tests', 'version']"
     },
     {
       "name": "error-rate-limit-is-rejected",
       "load_error": "Policy file: 'rate_limit' is not enforced by HYDRACUDA and never has been — it was parsed and discarded in v0.1.0-v0.2.0. Remove it. Rate limiting is stateful and belongs in the calling layer; leaving the key in a policy file asserts a control that does not exist."
     },
     {
-      "name": "error-tests-block-is-not-recognized-yet",
-      "load_error": "Policy file: unrecognized key(s) ['tests']. Allowed: ['adapters', 'audit', 'audit_path', 'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'version']"
+      "name": "error-tests-block-is-version-2-only",
+      "load_error": "Policy file: unrecognized key(s) ['tests']. Allowed: ['audit', 'audit_path', 'mode', 'tools', 'version']"
+    },
+    {
+      "name": "error-test-without-a-name",
+      "load_error": "tests[0]: 'name' is required and must be a string"
+    },
+    {
+      "name": "error-test-without-a-resource",
+      "load_error": "tests[0] ('a'): 'resource' is required and must be a string"
+    },
+    {
+      "name": "error-test-with-a-bad-expectation",
+      "load_error": "tests[0] ('a'): 'expect' must be one of ['allow', 'deny', 'refused', 'review'], got 'maybe'"
+    },
+    {
+      "name": "error-test-with-an-unknown-key",
+      "load_error": "tests[0]: unrecognized key(s) ['expectRule']. 'expectRule' — did you mean 'expect_rule'? Allowed: ['context', 'expect', 'expect_rule', 'name', 'params', 'resource']"
+    },
+    {
+      "name": "error-test-params-is-not-a-mapping",
+      "load_error": "tests[0] ('a'): 'params' must be a mapping, got str"
     },
     {
       "name": "error-missing-version",

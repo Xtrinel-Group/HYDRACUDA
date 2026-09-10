@@ -1,0 +1,25 @@
+[package]
+name = "hydracuda-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Standalone CLI for the HYDRACUDA policy engine: validate, plan, test."
+
+[[bin]]
+# `hcuda`, not `hydracuda`. The Python package's console script already owns that
+# name, and a machine with both installed would resolve one of them by `PATH`
+# order — silently running a different implementation than the one asked for.
+# Distinct names make which one ran a thing you can see.
+name = "hcuda"
+path = "src/main.rs"
+
+[dependencies]
+hydracuda-core = { path = "../core" }
+
+# No argument-parsing crate. The surface is three subcommands and four flags,
+# fixed by `docs/policy-spec.md`; this binary is a signed release artifact where
+# every dependency is supply chain a policy author has to trust; and help text
+# for a surface this size reads better written than generated. `src/args.rs` is
+# the whole parser, with tests.

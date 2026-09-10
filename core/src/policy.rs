@@ -22,6 +22,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::conditions::{validate_conditions, ConditionError, Conditions};
 use crate::difflib::closest_match;
+use crate::test_cases::TestCase;
 use crate::value::{py_repr, py_repr_str_list, py_str, py_truthy, Value};
 
 pub const DEFAULT_AUDIT_PATH: &str = ".hydracuda/audit.db";
@@ -41,6 +42,10 @@ const TOP_LEVEL_KEYS_V2: &[&str] = &[
     "mode",
     "pinned_context",
     "rules",
+    // Version 2 only, and deliberately absent from `TOP_LEVEL_KEYS_V1`: a
+    // legacy file gets no new surface, so `tests:` there is an unrecognized
+    // key like any other v2 addition.
+    "tests",
     "version",
 ];
 const TOOL_KEYS: &[&str] = &["allow", "parameter_rules", "reason"];
@@ -225,6 +230,8 @@ pub struct Policy {
     pub rules: Vec<Rule>,
     pub adapters: Vec<AdapterSpec>,
     pub pinned_context: Vec<String>,
+    /// Assertions about this policy's own decisions. Version 2 only.
+    pub tests: Vec<TestCase>,
     /// Present only for a version 1 file, which is kept so `validate` can report
     /// on the file as written rather than on its translation.
     pub tools: Option<IndexMap<String, ToolPolicy>>,
@@ -298,6 +305,7 @@ impl Policy {
                 rules,
                 adapters: Vec::new(),
                 pinned_context: Vec::new(),
+                tests: Vec::new(),
                 tools: Some(tools),
             });
         }
@@ -340,6 +348,7 @@ impl Policy {
             rules: parse_rules(raw)?,
             adapters: parse_adapters(raw)?,
             pinned_context,
+            tests: crate::test_cases::parse_tests(raw)?,
             tools: None,
         })
     }
@@ -508,7 +517,7 @@ fn suggest_key(key: &str, allowed: &[&str]) -> Option<String> {
     closest_match(key, &candidates, 0.8).map(|k| k.to_string())
 }
 
-fn reject_unknown_keys(
+pub(crate) fn reject_unknown_keys(
     where_: &str,
     mapping: &IndexMap<String, Value>,
     allowed: &[&str],
@@ -553,7 +562,7 @@ fn reject_unknown_keys(
     )))
 }
 
-fn require_mapping<'a>(
+pub(crate) fn require_mapping<'a>(
     value: &'a Value,
     where_: &str,
 ) -> Result<&'a IndexMap<String, Value>, PolicyError> {
@@ -889,17 +898,21 @@ mod tests {
             error("version: 2\nrules: []\ndefaultaction: allow\n"),
             "Policy file: unrecognized key(s) ['defaultaction']. 'defaultaction' — \
              did you mean 'default_action'? Allowed: ['adapters', 'audit', 'audit_path', \
-             'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'version']"
+             'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'tests', \
+             'version']"
         );
     }
 
     #[test]
-    fn the_tests_block_is_not_a_recognized_key_yet() {
-        // `docs/policy-spec.md` specifies it for this release; the loader must
-        // keep rejecting it until the implementation lands, so that nobody
-        // copies the spec into a file that silently does nothing.
+    fn the_tests_block_loads_on_version_2_and_nowhere_else() {
+        // Inverted deliberately in 0.4.0: `docs/policy-spec.md` specified
+        // `tests:` while the loader still rejected it, and this test pinned the
+        // rejection so nobody could copy the spec into a file that silently did
+        // nothing. The implementation has landed, so the pin moves to the
+        // remaining half — a version 1 file gets no new surface.
+        assert!(parse("version: 2\nrules: []\ntests: []\n").is_ok());
         assert!(
-            error("version: 2\nrules: []\ntests: []\n").contains("unrecognized key(s) ['tests']")
+            error("version: 1\ntools: {}\ntests: []\n").contains("unrecognized key(s) ['tests']")
         );
     }
 

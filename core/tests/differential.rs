@@ -193,6 +193,7 @@ fn compare_examples(report: &mut Report, cases: &Value, expected: &Json) {
 
         compare_loaded_policy(report, path, &policy, &recorded["policy"]);
         compare_decisions(report, path, &policy, case, &recorded["decisions"]);
+        compare_introspection(report, path, &policy, recorded);
     }
 }
 
@@ -251,6 +252,153 @@ fn compare_policies(report: &mut Report, cases: &Value, expected: &Json) {
 
         compare_loaded_policy(report, name, &policy, &recorded["policy"]);
         compare_decisions(report, name, &policy, case, &recorded["decisions"]);
+        compare_introspection(report, name, &policy, recorded);
+    }
+}
+
+/// `validate`, `plan` and `test` on the same policy.
+///
+/// The engine agreeing on every decision is not enough: `hcuda` is a second
+/// implementation of all three commands, and two tools that decide alike while
+/// disagreeing about which resources exist, which rule shadows which, or which
+/// case failed still tell one policy author different things.
+fn compare_introspection(report: &mut Report, name: &str, policy: &Policy, recorded: &Json) {
+    compare_diagnostics(report, name, policy, &recorded["diagnostics"]);
+    compare_plan(report, name, policy, &recorded["plan"]);
+    compare_tests(report, name, policy, &recorded["tests"]);
+}
+
+/// Every `validate` finding, in order, with its full message.
+///
+/// The recording drops `adapter-unbuildable`, the one diagnostic this crate
+/// cannot produce because it has no adapter registry to try `build_adapter`
+/// against — see `core/src/introspect.rs`. Nothing else is excused, and the
+/// message text is compared rather than only the code, because the code says a
+/// finding exists and the message is what the author acts on.
+fn compare_diagnostics(report: &mut Report, name: &str, policy: &Policy, expected: &Json) {
+    let found = hydracuda_core::analyze(policy);
+    let expected = expected.as_array().map(Vec::as_slice).unwrap_or(&[]);
+
+    report.check(
+        &format!("policy {name:?} diagnostic codes"),
+        found
+            .diagnostics
+            .iter()
+            .map(|d| format!("{}:{}", d.level.as_str(), d.code))
+            .collect::<Vec<_>>(),
+        expected
+            .iter()
+            .map(|d| {
+                format!(
+                    "{}:{}",
+                    d["level"].as_str().unwrap_or_default(),
+                    d["code"].as_str().unwrap_or_default()
+                )
+            })
+            .collect::<Vec<_>>(),
+    );
+
+    for (found, expected) in found.diagnostics.iter().zip(expected) {
+        let at = |field: &str| format!("policy {name:?} diagnostic {:?} {field}", found.code);
+        report.check(
+            &at("location"),
+            found.location.clone(),
+            expected["location"].as_str().map(str::to_string),
+        );
+        report.check(
+            &at("message"),
+            found.message.as_str(),
+            expected["message"].as_str().unwrap_or_default(),
+        );
+    }
+}
+
+/// `plan`: the declared surface, its decisions, and the rules that could change
+/// them for a call carrying parameters or context.
+fn compare_plan(report: &mut Report, name: &str, policy: &Policy, expected: &Json) {
+    let entries = hydracuda_core::plan(policy);
+    let expected = expected.as_array().map(Vec::as_slice).unwrap_or(&[]);
+
+    report.check(
+        &format!("policy {name:?} plan resources"),
+        entries
+            .iter()
+            .map(|entry| entry.resource.clone())
+            .collect::<Vec<_>>(),
+        expected
+            .iter()
+            .map(|entry| entry["resource"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>(),
+    );
+
+    for (entry, expected) in entries.iter().zip(expected) {
+        let at = |field: &str| format!("policy {name:?} plan {:?} {field}", entry.resource);
+        report.check(
+            &at("action"),
+            entry.action.as_str(),
+            expected["action"].as_str().unwrap_or_default(),
+        );
+        report.check(
+            &at("rule"),
+            entry.rule.clone(),
+            expected["rule"].as_str().map(str::to_string),
+        );
+        report.check(
+            &at("reason"),
+            entry.reason.as_str(),
+            expected["reason"].as_str().unwrap_or_default(),
+        );
+        report.check(
+            &at("conditional_rules"),
+            entry.conditional_rules.clone(),
+            strings(&expected["conditional_rules"]),
+        );
+    }
+}
+
+/// `test`: pass or fail per case, and the failure text.
+///
+/// The text is compared because it is the whole output of a failing case. Two
+/// runners that agree a case failed while explaining it differently would send an
+/// author looking at two different rules.
+fn compare_tests(report: &mut Report, name: &str, policy: &Policy, expected: &Json) {
+    let results = hydracuda_core::run_tests(policy);
+    let expected = expected.as_array().map(Vec::as_slice).unwrap_or(&[]);
+
+    report.check(
+        &format!("policy {name:?} test names"),
+        results
+            .iter()
+            .map(|result| result.name.clone())
+            .collect::<Vec<_>>(),
+        expected
+            .iter()
+            .map(|result| result["name"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>(),
+    );
+
+    for (result, expected) in results.iter().zip(expected) {
+        let at = |field: &str| format!("policy {name:?} test {:?} {field}", result.name);
+        report.check(
+            &at("resource"),
+            result.resource.as_str(),
+            expected["resource"].as_str().unwrap_or_default(),
+        );
+        report.check(
+            &at("expect"),
+            result.expect.as_str(),
+            expected["expect"].as_str().unwrap_or_default(),
+        );
+        report.check(
+            &at("status"),
+            result.outcome.status(),
+            expected["status"].as_str().unwrap_or_default(),
+        );
+        report.check(
+            &at("detail"),
+            result.outcome.detail(),
+            expected["detail"].as_str().unwrap_or_default(),
+        );
     }
 }
 

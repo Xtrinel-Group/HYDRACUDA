@@ -13,14 +13,22 @@ policy can be perfectly valid and still decide something surprising.
 from dataclasses import dataclass, field
 from typing import Any
 
-from hydracuda.adapters import AdapterError
+from hydracuda.adapters import Adapter, AdapterError, UndeclaredResource
 from hydracuda.adapters.registry import build_adapter
+from hydracuda.canonical import CanonicalizationError
 from hydracuda.conditions import pattern_subsumes, resource_matches
 from hydracuda.engine import PolicyEngine
-from hydracuda.policy import Policy, Rule
+from hydracuda.policy import Policy, Rule, TestCase
 
 ERROR = "error"
 WARNING = "warning"
+
+#: A test case's outcome. `UNSUPPORTED` exists for the compiled engine, which has
+#: no adapter registry and so cannot judge a confinement refusal; the pure-Python
+#: runner never produces it, and that asymmetry is reported rather than hidden.
+PASS = "pass"
+FAIL = "fail"
+UNSUPPORTED = "unsupported"
 
 #: Operators that an absent field does not satisfy, even though the English
 #: reading of them suggests it would. See `_check_negative_conditions`.
@@ -60,6 +68,23 @@ class PlanEntry:
     @property
     def conditional(self) -> bool:
         return bool(self.conditional_rules)
+
+
+@dataclass(frozen=True)
+class CaseResult:
+    """One test case and what happened to it."""
+
+    name: str
+    resource: str
+    expect: str
+    status: str
+    #: Empty on a pass. On a failure it names the expected decision and the one
+    #: actually produced, which is the whole point of the line.
+    detail: str = ""
+
+    @property
+    def passed(self) -> bool:
+        return self.status == PASS
 
 
 @dataclass
@@ -114,6 +139,7 @@ def analyze(policy: Policy) -> Report:
     _check_posture(policy, report)
     _check_rule_order(policy, report)
     _check_rules_against_surface(policy, report)
+    _check_tests(policy, report)
     return report
 
 
@@ -376,6 +402,204 @@ def _check_rules_against_surface(policy: Policy, report: Report) -> None:
                 location=_location(index, rule),
             )
         )
+
+
+def _check_tests(policy: Policy, report: Report) -> None:
+    """Check the `tests:` block itself, before any case runs.
+
+    The first two findings are errors, which is how the specification's "hard
+    error" survives being a diagnostic rather than a load failure: `validate` and
+    `test` both exit non-zero on an error. They are not load errors because the
+    specification assigns them codes and levels in the diagnostic table, and a
+    diagnostic that can never fire — because loading already refused the file — is
+    worse than no diagnostic.
+    """
+    declared = [
+        resource for spec in policy.adapters for resource in spec.resources
+    ]
+    when_fields = policy.when_fields()
+    names: dict[str, int] = {}
+
+    for index, case in enumerate(policy.tests):
+        at = f"tests[{index}] {case.name}"
+
+        if case.name in names:
+            report.diagnostics.append(
+                Diagnostic(
+                    ERROR,
+                    "test-duplicate-name",
+                    f"the case at tests[{names[case.name]}] has the same name; "
+                    f"the output is per-case pass/fail, so two cases sharing a "
+                    f"name make that report unreadable",
+                    location=at,
+                )
+            )
+        else:
+            names[case.name] = index
+
+        if "*" in case.resource:
+            report.diagnostics.append(
+                Diagnostic(
+                    ERROR,
+                    "test-resource-is-a-pattern",
+                    f"resource '{case.resource}' contains a wildcard. A test case "
+                    f"asserts one request, so `resource` is an exact name — use "
+                    f"one case per resource the pattern covers.",
+                    location=at,
+                )
+            )
+
+        if case.expect != "refused" and declared and case.resource not in declared:
+            report.diagnostics.append(
+                Diagnostic(
+                    WARNING,
+                    "test-undeclared-resource",
+                    f"no adapter declares '{case.resource}', so it is refused at "
+                    f"the adapter boundary before any rule is consulted and this "
+                    f"case cannot pass. Add it to an adapter's `resources`, or "
+                    f"expect `refused`.",
+                    location=at,
+                )
+            )
+
+        missing = sorted(set(policy.pinned_context) - set(case.context))
+        if missing:
+            report.diagnostics.append(
+                Diagnostic(
+                    WARNING,
+                    "test-missing-pinned-context",
+                    f"`pinned_context` names {missing}, which this case does not "
+                    f"set. Context construction fails without a pinned field at "
+                    f"runtime, so the case is evaluating a state that cannot "
+                    f"occur.",
+                    location=at,
+                )
+            )
+
+        unread = sorted(set(case.context) - when_fields)
+        if unread:
+            report.diagnostics.append(
+                Diagnostic(
+                    WARNING,
+                    "test-unread-context-field",
+                    f"sets context field(s) {unread}, which no rule's `when` "
+                    f"block reads. Usually a typo, and a typo'd field name makes "
+                    f"the case assert something other than what it appears to.",
+                    location=at,
+                )
+            )
+
+
+def run_tests(policy: Policy) -> list[CaseResult]:
+    """Run every case in the policy's `tests:` block.
+
+    Read-only in the same sense `plan` is: no tool is executed, no audit record is
+    written, no network call is made, and the clock is not read.
+
+    It also reads no files, which is less obvious than it sounds. Normalization
+    runs, mirroring the order `ToolCallProxy.call` uses, and canonicalization does
+    touch the filesystem — but only for a resource's declared `path_parameters`,
+    and `build_adapter` declares from an `adapters:` block with none. So the only
+    refusal a policy file can produce on its own is `UndeclaredResource`, and a
+    `tests:` block is reproducible on any machine. Confinement is still enforced at
+    runtime for an integrator-registered path parameter; it is just not something
+    this runner can exercise.
+    """
+    engine = PolicyEngine(policy)
+    adapters: list[Adapter] = []
+    unbuildable: str | None = None
+
+    for spec in policy.adapters:
+        try:
+            adapters.append(build_adapter(spec))
+        except AdapterError as e:
+            # `analyze` reports this as `adapter-unbuildable`, and `hydracuda test`
+            # stops on an error before reaching here. Reached only by a direct
+            # caller, and the cases are marked unsupported rather than failed:
+            # nothing is known to be wrong with the policy's decisions.
+            unbuildable = str(e)
+            break
+
+    results: list[CaseResult] = []
+    for case in policy.tests:
+        if unbuildable is not None:
+            results.append(
+                _result(case, UNSUPPORTED, f"adapter could not be built: {unbuildable}")
+            )
+            continue
+        results.append(_run_case(engine, adapters, case))
+    return results
+
+
+def _run_case(engine: PolicyEngine, adapters: list[Adapter], case: TestCase) -> CaseResult:
+    """One case, in the order `ToolCallProxy.call` uses.
+
+    Adapter normalization first — an undeclared resource or a path that fails
+    confinement is refused before any rule is consulted — then evaluation of the
+    canonical resource and parameters. Evaluating one value and refusing another
+    would not be the same check the proxy performs.
+    """
+    resource = case.resource
+    params: dict[str, Any] = dict(case.params)
+
+    if adapters:
+        adapter = next((a for a in adapters if a.declares(case.resource)), None)
+        if adapter is None:
+            if case.expect == "refused":
+                return _result(case, PASS)
+            return _result(
+                case,
+                FAIL,
+                f"expected {case.expect}, got refused — no adapter declares "
+                f"'{case.resource}'",
+            )
+        try:
+            normalized = adapter.normalize(case.resource, case.params)
+        except (UndeclaredResource, CanonicalizationError) as e:
+            if case.expect == "refused":
+                return _result(case, PASS)
+            return _result(case, FAIL, f"expected {case.expect}, got refused — {e}")
+        resource = normalized.resource
+        params = normalized.params
+    elif case.expect == "refused":
+        # No adapter means no adapter boundary: `ToolCallProxy` skips
+        # normalization when it was built without one, so nothing is refused and
+        # every request reaches the rules.
+        return _result(
+            case,
+            FAIL,
+            "expected refused, but the policy declares no adapters, so there is "
+            "no boundary to refuse at and every request reaches the rules",
+        )
+
+    decision = engine.evaluate(resource, params, case.context)
+    rule = decision.rule or "(default)"
+
+    if decision.action != case.expect:
+        return _result(
+            case, FAIL, f"expected {case.expect}, got {decision.action} from {rule}"
+        )
+
+    # The right answer for the wrong reason is still wrong.
+    if case.expect_rule is not None and rule != case.expect_rule:
+        return _result(
+            case,
+            FAIL,
+            f"expected {case.expect} from '{case.expect_rule}', got "
+            f"{decision.action} from '{rule}'",
+        )
+
+    return _result(case, PASS)
+
+
+def _result(case: TestCase, status: str, detail: str = "") -> CaseResult:
+    return CaseResult(
+        name=case.name,
+        resource=case.resource,
+        expect=case.expect,
+        status=status,
+        detail=detail,
+    )
 
 
 def plan(policy: Policy) -> list[PlanEntry]:
