@@ -22,4 +22,10 @@ jobs:
 
       - run: python -m build
 
-      - uses: pypa/gh-action-pypi-publish@v1.12.3
+      # v1.12.3 bundled Twine 6, which rejects core metadata 2.5 with
+      # "InvalidDistribution: Make sure the distribution is using a
+      # supported Metadata-Version". Hatchling is unpinned in
+      # pyproject.toml's build requirements, so it started emitting 2.5 on
+      # its own and the v0.3.0 publish failed at the metadata check. This
+      # version bundles Twine 7, which accepts 2.5.
+      - uses: pypa/gh-action-pypi-publish@v1.14.2
