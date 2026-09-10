@@ -1651,35 +1651,6 @@
       ]
     },
     {
-      "name": "version-1-allow-zero-is-a-fail-open-quirk",
-      "policy": {
-        "version": 1,
-        "mode": "enforce",
-        "audit_path": ".hydracuda/audit.db",
-        "default_action": "deny",
-        "default_reason": "{resource}: not listed in policy — default deny",
-        "rules": [
-          "legacy:t:allow"
-        ],
-        "when_fields": [],
-        "unpinned_when_fields": [],
-        "declared_resources": [
-          "t"
-        ]
-      },
-      "decisions": [
-        {
-          "resource": "t",
-          "action": "allow",
-          "reason": "all policy checks passed",
-          "rule": "legacy:t:allow",
-          "mode": "enforce",
-          "enforced": true,
-          "blocked": false
-        }
-      ]
-    },
-    {
       "name": "version-1-empty-reason-falls-back-to-the-action",
       "policy": {
         "version": 1,
@@ -1787,6 +1758,18 @@
     {
       "name": "error-version-1-bad-allow",
       "load_error": "Tool 't': 'allow' must be true, false, or 'review', got 'maybe'"
+    },
+    {
+      "name": "error-version-1-allow-zero-does-not-fail-open",
+      "load_error": "Tool 't': 'allow' must be true, false, or 'review', got '0'"
+    },
+    {
+      "name": "error-version-1-allow-zero-float",
+      "load_error": "Tool 't': 'allow' must be true, false, or 'review', got '0.0'"
+    },
+    {
+      "name": "error-version-1-allow-one",
+      "load_error": "Tool 't': 'allow' must be true, false, or 'review', got '1'"
     },
     {
       "name": "error-adapter-without-type",

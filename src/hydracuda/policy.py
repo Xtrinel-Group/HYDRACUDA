@@ -320,7 +320,14 @@ def _parse_tools(raw: dict) -> dict[str, ToolPolicy]:
         _reject_unknown_keys(where, tool_conf, _TOOL_KEYS)
 
         allow = tool_conf.get("allow", True)
-        if allow not in (True, False, "review"):
+        # `isinstance`, not `allow in (True, False, "review")`. The membership
+        # test accepted `0` and `0.0`, because Python compares by value and
+        # `0 == False` — but the branch in `rules_from_tools` that denies asks
+        # `allow is False`, which no integer satisfies. So `allow: 0` passed
+        # validation and then translated to an *allow* rule: a tool the author
+        # had written down as blocked was permitted, with the accompanying
+        # `reason:` silently dropped and `validate` reporting no problem.
+        if not (isinstance(allow, bool) or allow == "review"):
             raise PolicyError(
                 f"{where}: 'allow' must be true, false, or 'review', got '{allow}'"
             )

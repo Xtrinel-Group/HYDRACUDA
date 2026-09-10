@@ -12,6 +12,31 @@
   land in 0.4.0, and the section is marked accordingly so nobody reads it as
   current behaviour.
 
+## 0.3.1 — 2026-09-10
+
+### Fixed
+
+- Version 1 policies: `allow: 0` loaded without complaint and permitted the
+  tool. Validation compared by value, where `0 == False` passes, but the branch
+  that produces a deny rule compared by identity — and no integer is `False`, so
+  the tool fell through to an allow rule. A tool written down as blocked ran, its
+  `reason:` was discarded, and `hydracuda validate` reported no errors and no
+  warnings. `allow: 0.0` behaved the same way.
+
+  `allow` must now be a genuine boolean or the string `"review"`, so an integer
+  is a load error instead of a silent permission. This also rejects `allow: 1`,
+  which previously allowed by accident: a policy using integers where the schema
+  documents `true`/`false` now fails to load rather than being guessed at, which
+  points at the generator that emitted them. The YAML spellings of a boolean are
+  unaffected — `no`, `off` and `false` all still deny, as do `yes`, `on` and
+  `true` for allow.
+
+  Present since 0.1.0. Only reachable through the version 1 `tools:` format, and
+  only with a value no documentation or `hydracuda init` template has ever shown,
+  so a hand-written policy is unlikely to hit it; a policy generated from a
+  source that spells booleans as 0/1 — a SQLite column, a CSV, a template
+  rendering an int — is the case that would.
+
 ## 0.3.0 — 2026-09-09 — Phase 1: policy as code
 
 Policy moves into an external, version-controllable file; adapters declare what

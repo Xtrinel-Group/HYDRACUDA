@@ -1,6 +1,6 @@
 """HYDRACUDA - Runtime policy enforcement for AI tool calls."""
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 from hydracuda.adapters import (
     Adapter,

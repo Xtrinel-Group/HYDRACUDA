@@ -22,7 +22,7 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::conditions::{validate_conditions, ConditionError, Conditions};
 use crate::difflib::closest_match;
-use crate::value::{py_eq, py_repr, py_repr_str_list, py_str, py_truthy, Value};
+use crate::value::{py_repr, py_repr_str_list, py_str, py_truthy, Value};
 
 pub const DEFAULT_AUDIT_PATH: &str = ".hydracuda/audit.db";
 
@@ -688,35 +688,26 @@ fn parse_tools(raw: &IndexMap<String, Value>) -> Result<IndexMap<String, ToolPol
 
 /// Parse a version 1 `allow:` value.
 ///
-/// The comparison is Python's, which is why `allow: 0` is accepted and treated
-/// as *allow* rather than as `false`: the validity check uses `==`, where
-/// `0 == False`, but the branch that denies uses `is False`, which an integer
-/// never satisfies. That is a fail-open quirk of the version 1 loader,
-/// reproduced here on purpose so the two engines agree; see the test below.
+/// Only a genuine boolean or the string `"review"` is accepted. An integer is
+/// rejected rather than coerced, which matters because the earlier check
+/// compared by value: `0 == False` made `allow: 0` valid, while the branch that
+/// denies asked `is False` and an integer never satisfies it, so the tool was
+/// *allowed*. Rejecting is the fail-closed answer and it surfaces the generator
+/// that emitted `0` instead of guessing at what it meant.
 fn parse_allow(value: Option<&Value>, where_: &str) -> Result<Allow, PolicyError> {
     let Some(value) = value else {
         return Ok(Allow::Yes);
     };
 
-    let permitted = [
-        Value::Bool(true),
-        Value::Bool(false),
-        Value::Str("review".into()),
-    ];
-    if !permitted.iter().any(|candidate| py_eq(value, candidate)) {
-        return Err(PolicyError(format!(
+    match (value.as_bool_strict(), value.as_str()) {
+        (Some(true), _) => Ok(Allow::Yes),
+        (Some(false), _) => Ok(Allow::No),
+        (_, Some("review")) => Ok(Allow::Review),
+        _ => Err(PolicyError(format!(
             "{where_}: 'allow' must be true, false, or 'review', got '{}'",
             py_str(value)
-        )));
+        ))),
     }
-
-    if value.as_bool_strict() == Some(false) {
-        return Ok(Allow::No);
-    }
-    if value.as_str() == Some("review") {
-        return Ok(Allow::Review);
-    }
-    Ok(Allow::Yes)
 }
 
 fn parse_rules(raw: &IndexMap<String, Value>) -> Result<Vec<Rule>, PolicyError> {
@@ -1072,18 +1063,18 @@ mod tests {
         );
     }
 
-    /// Recorded, not endorsed. `allow: 0` reads as a denial and is treated as an
-    /// allow by both engines, because the version 1 loader validates with `==`
-    /// and branches with `is`. Reproducing it is what keeps the Rust engine a
-    /// port; fixing it is a change to both, and is called out separately.
+    /// `allow: 0` used to mean *allow*, because validation compared by value
+    /// (`0 == False`) and the deny branch compared by identity. An integer is
+    /// now a load error, so the value that reads as a denial can no longer be
+    /// silently read as a permission.
     #[test]
-    fn allow_zero_is_a_fail_open_quirk_of_the_version_1_loader() {
+    fn an_integer_is_not_a_boolean_and_no_longer_fails_open() {
         for (value, expected) in [
             ("false", Allow::No),
             ("no", Allow::No),
+            ("off", Allow::No),
             ("true", Allow::Yes),
-            ("0", Allow::Yes),
-            ("1", Allow::Yes),
+            ("yes", Allow::Yes),
             ("'review'", Allow::Review),
         ] {
             let policy = parse(&format!("version: 1\ntools:\n  t:\n    allow: {value}\n")).unwrap();
@@ -1093,10 +1084,17 @@ mod tests {
                 "allow: {value}"
             );
         }
-        assert_eq!(
-            error("version: 1\ntools:\n  t:\n    allow: 2\n"),
-            "Tool 't': 'allow' must be true, false, or 'review', got '2'"
-        );
+
+        // `0` and `0.0` are the two that used to fail open. `1` and `2` were
+        // already allowed, correctly and by accident respectively; all four are
+        // now rejected by the same rule, because none of them is a boolean.
+        for value in ["0", "0.0", "1", "2"] {
+            assert_eq!(
+                error(&format!("version: 1\ntools:\n  t:\n    allow: {value}\n")),
+                format!("Tool 't': 'allow' must be true, false, or 'review', got '{value}'"),
+                "allow: {value}"
+            );
+        }
     }
 
     /// Also recorded rather than endorsed: the loader reaches for Python's `or`

@@ -304,6 +304,28 @@ def test_v1_invalid_allow_rejected():
         policy_from_yaml("version: 1\ntools:\n  x:\n    allow: sometimes\n")
 
 
+@pytest.mark.parametrize("value", ["0", "0.0", "1", "2"])
+def test_v1_integer_allow_rejected(value):
+    # `allow: 0` used to load and produce an *allow* rule. Validation compared by
+    # value, where `0 == False` passes, but `rules_from_tools` denies on
+    # `allow is False`, which no integer satisfies. So a tool the author had
+    # written down as blocked was permitted.
+    with pytest.raises(PolicyError, match="'allow' must be true, false, or 'review'"):
+        policy_from_yaml(f"version: 1\ntools:\n  x:\n    allow: {value}\n")
+
+
+@pytest.mark.parametrize(
+    "value,action",
+    [("false", "deny"), ("no", "deny"), ("off", "deny"), ("true", "allow"), ("yes", "allow")],
+)
+def test_v1_yaml_booleans_still_load(value, action):
+    # The fix must not catch the YAML 1.1 spellings of a boolean along with the
+    # integers: `no` and `off` are `False` to PyYAML, and a policy using them
+    # denies as it always has.
+    policy = policy_from_yaml(f"version: 1\ntools:\n  x:\n    allow: {value}\n")
+    assert policy.rules[0].action == action
+
+
 def test_v1_bad_deny_pattern_regex_rejected():
     with pytest.raises(PolicyError, match="invalid regex"):
         policy_from_yaml(

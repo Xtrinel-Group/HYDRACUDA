@@ -380,14 +380,6 @@ policies:
     requests:
       - resource: t
 
-  - name: version-1-allow-zero-is-a-fail-open-quirk
-    policy: |
-      version: 1
-      tools:
-        t:
-          allow: 0
-    requests:
-      - resource: t
 
   - name: version-1-empty-reason-falls-back-to-the-action
     policy: |
@@ -489,6 +481,28 @@ policies:
       tools:
         t:
           allow: maybe
+  # `allow: 0` used to load and mean *allow*, so a tool written down as blocked
+  # ran. An integer is a boolean in neither engine; these pin that it stays a
+  # load error rather than drifting back to a silent permission.
+  - name: error-version-1-allow-zero-does-not-fail-open
+    policy: |
+      version: 1
+      tools:
+        t:
+          allow: 0
+          reason: "Destructive operation. Blocked by default."
+  - name: error-version-1-allow-zero-float
+    policy: |
+      version: 1
+      tools:
+        t:
+          allow: 0.0
+  - name: error-version-1-allow-one
+    policy: |
+      version: 1
+      tools:
+        t:
+          allow: 1
   - name: error-adapter-without-type
     policy: |
       version: 2
