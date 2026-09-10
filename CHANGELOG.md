@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- `docs/policy-spec.md` specifies the `tests:` block: test case keys, how
+  `params`/`context` relate to `where`/`when`, `expect: refused` for adapter
+  boundary refusals, `expect_rule` for asserting *which* rule decided, six
+  diagnostics, and the non-goals. Specification only — the loader still rejects
+  `tests` as an unrecognized key and there is no `hydracuda test` command. Both
+  land in 0.4.0, and the section is marked accordingly so nobody reads it as
+  current behaviour.
+
 ## 0.3.0 — 2026-09-09 — Phase 1: policy as code
 
 Policy moves into an external, version-controllable file; adapters declare what

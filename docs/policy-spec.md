@@ -53,6 +53,10 @@ silently ignored, which meant a policy could appear to have a rule that was
 never active — a fail-open condition. Where a rejected key looks like a
 misspelling of a real one, the error names the intended key.
 
+`tests` is **not** in the table above, and is therefore currently rejected like
+any other unknown key. Its schema is specified in [Test cases](#test-cases-tests)
+and implemented in 0.4.0; the table gains a row when the loader does.
+
 ### Rejected keys
 
 `rate_limit` is **rejected**. It was accepted and discarded in v0.1.0–v0.2.0,
@@ -442,6 +446,9 @@ hydracuda plan     [policy.yaml] [--reasons]
 Both default to `hydracuda.yaml`. `validate` exits non-zero on an error, and on
 a warning too under `--strict`. `check` is a deprecated alias for `validate`.
 
+A third read-only command, `hydracuda test`, is specified in
+[Test cases](#test-cases-tests) but not implemented in 0.3.0.
+
 ### `validate`
 
 Schema problems are already hard errors at load time, so everything `validate`
@@ -480,6 +487,193 @@ Each resource is evaluated **with no parameters and no context**, which is all a
 policy file supplies on its own. Rules that could change the outcome for a real
 call are listed as `conditional` rather than guessed at, so the output is never
 mistaken for a claim about every possible request.
+
+---
+
+## Test cases (`tests:`)
+
+> **Status: specified, not yet implemented.** The 0.3.0 loader rejects `tests:`
+> as an unrecognized key, and there is no `hydracuda test` command. This section
+> is the reviewed schema that 0.4.0 implements against. Nothing here describes
+> current behaviour — see [Top-level keys](#top-level-keys) for what loads today.
+
+A policy file states what is allowed. A `tests:` block states what the author
+*believed* it allowed, in a form the tool can check.
+
+This is worth having because the failures Phase 1 fixed were not wrong rules —
+they were rules that read as active and were not. A key typo'd to
+`parameterRules` parsed and did nothing; `rate_limit` was accepted and
+discarded; `mode: shadow` computed a decision and blocked nothing. Strict
+validation catches the misspelling class. It cannot catch a correctly spelled
+rule in the wrong order, and rule order is first-match-wins.
+
+```yaml
+tests:
+  - name: agent-may-read-project-files
+    resource: filesystem.read_file
+    params:
+      path: /workspace/src/main.py
+    context:
+      agent: research-bot
+      trust: verified
+    expect: allow
+
+  - name: traversal-is-denied-even-for-verified-agents
+    resource: filesystem.read_file
+    params:
+      path: /workspace/../etc/passwd
+    context:
+      agent: research-bot
+      trust: verified
+    expect: deny
+    expect_rule: block-sensitive-paths
+```
+
+### Test case keys
+
+| Key | Required | Meaning |
+|---|---|---|
+| `name` | yes | Unique label. Identifies the case in output. |
+| `resource` | yes | An exact resource name, **never a pattern**. A test asserts one request. |
+| `expect` | yes | `allow`, `deny`, `review`, or `refused`. |
+| `params` | no | The request parameters, as literal values. Omitted means no parameters. |
+| `context` | no | The evaluation context, as literal values. |
+| `expect_rule` | no | `name` of the rule that must produce the decision. |
+
+Any other key is a **hard error**, as everywhere else in the format.
+
+### How `params` / `context` relate to `where` / `when`
+
+They are the two sides of the same pair. A rule describes a *set* of requests
+using operators; a test case describes *one* request using values.
+
+| Rule key | holds | Test case key | holds | Controlled by |
+|---|---|---|---|---|
+| `where` | operators on parameters | `params` | literal parameter values | the **agent** |
+| `when` | operators on context | `context` | literal context values | the **integrator** |
+
+The names deliberately differ from `where` / `when`. Reusing them would put
+operator maps and literal values under the same key, so this:
+
+```yaml
+# WRONG — this is not a condition. It sets `path` to the literal mapping
+# {matches: [...]}, which matches no rule and makes the case pass or fail for
+# a reason that has nothing to do with the policy.
+params:
+  path:
+    matches: ["^/workspace/"]
+```
+
+...would be a silently wrong test rather than a schema error. `params` and
+`context` are also the names the [trust model](#what-the-agent-controls) table
+and `ToolCallProxy.call()` already use, so a test case reads as the call it
+stands in for.
+
+The trust boundary still means what it means. `params` is the untrusted side, so
+tests should carry the hostile values you expect an agent to try — that is the
+main thing this block is for. `context` is the trusted side, and a test setting
+it is not a bypass: `hydracuda test` calls `PolicyEngine.evaluate()`, which is a
+pure function with no proxy and no `ContextError`, exactly as `plan` does. See
+[What is *not* guaranteed](#what-is-not-guaranteed).
+
+### `expect: refused`
+
+Two runtime outcomes are not policy decisions: a resource no adapter declares,
+and a path that fails canonicalization or root confinement. Both are refused at
+the adapter boundary before any rule is consulted, and both are enforced even
+under `mode: shadow`.
+
+`refused` is a separate expectation rather than folded into `deny` because they
+are different mechanisms, and a test that accepts either would pass for the
+wrong reason — reporting a policy rule as the control when confinement was
+actually doing the work, or the reverse.
+
+```yaml
+  - name: undeclared-tools-are-refused-not-evaluated
+    resource: filesystem.chmod
+    expect: refused
+```
+
+Supporting `refused` means `hydracuda test` runs adapter normalization before
+evaluation, mirroring the order the proxy uses. **That has a cost worth stating:
+canonicalization touches the filesystem**, so a case with path parameters is
+only as reproducible as the tree it runs on — a symlink or a missing `root`
+changes the answer. That is a property of canonicalization, not of the test
+runner (see [Canonicalization is a check, not a
+lock](#what-is-not-guaranteed)). Point `root` at a fixture directory committed
+alongside the policy when you need a case to mean the same thing on every
+machine.
+
+### `expect_rule`
+
+Optional, and the reason to bother with it: `expect` alone cannot distinguish
+the right answer from the right answer for the wrong reason. With first-match
+wins, a rule reordered above another can leave every `expect` satisfied while
+the policy has changed meaning. `expect_rule` pins the decision to a named rule,
+so that reordering fails a test instead of passing silently.
+
+There is deliberately no `expect_reason`. Reason strings are prose for humans
+and the audit log; asserting on them would make every wording change a test
+failure, which teaches people to stop writing tests.
+
+### Names
+
+`name` is required, and duplicate names are a **hard error**.
+
+This is stricter than rules, where `duplicate-rule-name` is only a warning, and
+the asymmetry is intentional: rule names may be generated by version 1
+translation, but test names are always hand-written. Duplicates also matter more
+here, because the output is per-case pass/fail and two cases sharing a name make
+that report unreadable. This is the same defect as the v0.2.0 audit records that
+could not say which of several identically named deny patterns had fired.
+
+### Diagnostics
+
+Reported by `validate` and by `test` before any case runs, using the codes and
+levels of the [`validate` table](#validate).
+
+| Code | Level | Meaning |
+|---|---|---|
+| `test-duplicate-name` | error | Two cases share a `name`. |
+| `test-resource-is-a-pattern` | error | `resource` contains `*` or `**`. A test asserts one request. |
+| `test-undeclared-resource` | warning | No adapter declares this `resource` and `expect` is not `refused`, so the case cannot pass. |
+| `test-missing-pinned-context` | warning | `pinned_context` names a field the case does not set. Construction fails without it at runtime, so the case is evaluating a state that cannot occur. |
+| `test-unread-context-field` | warning | The case sets a `context` field no rule's `when` reads. Usually a typo, and a typo'd field name makes the case assert something other than what it appears to. |
+| `shadow-mode` | warning | Under `mode: shadow` every `expect: deny` can pass while nothing is blocked in production. Same code as `validate` reports, for the same reason. |
+
+`test-missing-pinned-context` is the one worth dwelling on. It is the `tests:`
+block's version of `unpinned-when-field`: a policy that gates on `trust` and a
+test suite that never sets `trust` will agree with each other and tell you
+nothing about the deployment.
+
+### Running
+
+```
+hydracuda test [policy.yaml]
+```
+
+Exit code `0` when every case passes, `1` when any case fails, and the usual
+non-zero on a load or schema error. Output is one line per case plus a summary
+count, so a failure names the case, the expected decision, and the decision that
+was actually produced.
+
+`test` is read-only in the same sense `plan` is: no tool is executed, no audit
+record is written, no network call is made, and the clock is not read. The
+policy file is the only input. That is what makes a `tests:` block something CI
+can run on every commit.
+
+### Out of scope
+
+Named because a test block invites all of it, and none of it is in this schema:
+
+- **No fixtures, setup, or teardown.** Cases are independent and declarative.
+- **No handler mocking.** Nothing is executed, so there is nothing to mock.
+- **No assertions on audit rows.** `test` writes no audit record.
+- **No reason-string matching.** See [`expect_rule`](#expect_rule).
+- **No separate test file.** Tests live with the policy they describe, because a
+  policy copied without its expectations is a policy with none.
+- **No test-only rules or overrides.** A test that changes the policy to pass is
+  not a test of the policy.
 
 ---
 
