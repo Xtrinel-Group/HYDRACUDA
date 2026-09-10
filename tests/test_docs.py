@@ -91,40 +91,36 @@ def test_the_readme_lists_every_audit_column():
         assert f"`{column}`" in text, f"audit column {column} is undocumented"
 
 
-def test_the_specified_tests_block_is_marked_as_not_implemented():
-    """`tests:` is specified ahead of the loader that will accept it.
+def test_the_tests_block_is_no_longer_marked_as_unimplemented():
+    """The inverse of the 0.3.0 guard, which is why it reads oddly.
 
-    A spec section that reads as current behaviour is worse than no section: the
-    loader rejects `tests` today, so anyone copying it gets a load error. The
-    status marker is the part that has to survive editing.
+    Through 0.3.x the section carried a "not yet implemented" banner and a test
+    that pinned it, because a spec section reading as current behaviour is worse
+    than no section — the loader rejected `tests` and anyone copying it got a load
+    error. 0.4.0 implements it, so the banner has to come off, and a stale banner
+    is the same defect pointing the other way.
     """
     text = SPEC.read_text()
     assert "## Test cases (`tests:`)" in text
-    heading, _, body = text.partition("## Test cases (`tests:`)")
-    status = body[: body.index("##")]
-    assert "not yet implemented" in status.lower()
-    assert "0.4.0" in status
+    _, _, body = text.partition("## Test cases (`tests:`)")
+    section = body[: body.index("\n## ")]
+    assert "not yet implemented" not in section.lower()
 
 
-def test_no_loadable_policy_example_uses_the_unimplemented_tests_block():
-    """Guard, and a reminder to delete itself.
+def test_the_tests_block_is_shown_in_a_policy_the_loader_accepts():
+    """A fragment is not enough now that it loads.
 
-    Every complete policy example in the docs is parsed by the real loader, and
-    the loader rejects `tests`. So while it is unimplemented the block may only
-    appear as a fragment. When 0.4.0 teaches the loader to accept it, this test
-    should be removed and `tests:` shown in a full example instead.
+    `policy_blocks` feeds every complete example through the real loader, so the
+    assertion is that at least one of them exercises `tests:` — otherwise the
+    schema could drift from the documented example without failing anything.
     """
-    from hydracuda.policy import parse_policy
-
-    with pytest.raises(Exception):
-        parse_policy({"version": 2, "rules": [], "tests": []})
-
-    for path in (README, SPEC):
-        for index, block in enumerate(policy_blocks(path)):
-            assert "tests:" not in block, (
-                f"{path.name} policy block {index} uses `tests:`, which the "
-                "loader rejects; keep it a fragment until 0.4.0 lands"
-            )
+    blocks = [
+        block
+        for path in (README, SPEC)
+        for block in policy_blocks(path)
+        if "tests:" in block
+    ]
+    assert blocks, "no complete policy example uses `tests:`"
 
 
 def test_the_tests_block_schema_does_not_reuse_the_condition_key_names():

@@ -45,10 +45,18 @@ _TOP_LEVEL_KEYS_V2 = {
     "adapters",
     "rules",
     "pinned_context",
+    # Version 2 only, and deliberately absent from `_TOP_LEVEL_KEYS_V1`: a legacy
+    # file gets no new surface, so `tests:` there is an unrecognized key like any
+    # other version 2 addition.
+    "tests",
 }
 _TOOL_KEYS = {"allow", "parameter_rules", "reason"}
 _PARAMETER_RULE_KEYS = {"deny_patterns"}
 _RULE_KEYS = {"name", "resource", "action", "reason", "where", "when"}
+_TEST_KEYS = {"name", "resource", "expect", "params", "context", "expect_rule"}
+
+#: What a test case may expect. `refused` is not an action — see `TestCase`.
+VALID_EXPECTATIONS = {"allow", "deny", "review", "refused"}
 _ADAPTER_KEYS = {"name", "type", "resources", "config"}
 _AUDIT_KEYS = {"path"}
 
@@ -98,6 +106,30 @@ class Rule:
         return self.name or f"{self.action}:{self.resource}"
 
 
+@dataclass(frozen=True)
+class TestCase:
+    """One assertion about one request.
+
+    A policy file states what is allowed; a `tests:` block states what the author
+    *believed* it allowed. Strict validation catches a misspelled key, but not a
+    correctly spelled rule in the wrong order — and rule order is first-match-wins.
+
+    `params` and `context` hold literal values, where a rule's `where` and `when`
+    hold operators on them. The names differ from `where`/`when` on purpose: under
+    the same key, `path: {matches: [...]}` would parse as a literal mapping and
+    produce a case that passes or fails for a reason unrelated to the policy.
+    """
+
+    name: str
+    resource: str
+    expect: str
+    params: dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
+    #: `name` of the rule that must produce the decision. `expect` alone cannot
+    #: tell the right answer from the right answer for the wrong reason.
+    expect_rule: str | None = None
+
+
 @dataclass
 class AdapterSpec:
     """Declaration of one adapter instance and the resources it exposes."""
@@ -126,6 +158,8 @@ class Policy:
     rules: list[Rule] = field(default_factory=list)
     adapters: list[AdapterSpec] = field(default_factory=list)
     pinned_context: list[str] = field(default_factory=list)
+    #: Assertions about this policy's own decisions. Version 2 only.
+    tests: list[TestCase] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.tools is not None and not self.rules:
@@ -424,6 +458,70 @@ def _parse_rules(raw: dict) -> list[Rule]:
     return rules
 
 
+def _parse_tests(raw: dict) -> list[TestCase]:
+    """Parse the `tests:` block. Version 2 only — see `parse_policy`.
+
+    Shape only. Duplicate names and a wildcard `resource` are *diagnostics*
+    (`test-duplicate-name`, `test-resource-is-a-pattern`), even though the
+    specification calls them hard errors, because the diagnostic table gives them
+    codes and an error level — and a diagnostic that can never fire, because
+    loading already refused the file, is worse than no diagnostic. They stay hard:
+    `validate` and `test` both exit non-zero on an error-level finding.
+    """
+    raw_tests = raw.get("tests", [])
+    if raw_tests is None:
+        raw_tests = []
+    if not isinstance(raw_tests, list):
+        raise PolicyError("'tests' must be a list")
+
+    cases: list[TestCase] = []
+    for index, raw_case in enumerate(raw_tests):
+        where = f"tests[{index}]"
+        raw_case = _require_mapping(raw_case, where)
+        _reject_unknown_keys(where, raw_case, _TEST_KEYS)
+
+        # `name` is required here, unlike a rule's, because the output is per-case
+        # pass/fail and an unnamed case cannot be reported on. Read first so every
+        # later message about this case identifies it.
+        name = raw_case.get("name")
+        if not isinstance(name, str) or not name:
+            raise PolicyError(f"{where}: 'name' is required and must be a string")
+        where = f"tests[{index}] ('{name}')"
+
+        resource = raw_case.get("resource")
+        if not isinstance(resource, str) or not resource:
+            raise PolicyError(f"{where}: 'resource' is required and must be a string")
+
+        expect = raw_case.get("expect")
+        if expect not in VALID_EXPECTATIONS:
+            raise PolicyError(
+                f"{where}: 'expect' must be one of "
+                f"{sorted(VALID_EXPECTATIONS)}, got {expect!r}"
+            )
+
+        expect_rule = raw_case.get("expect_rule")
+        if expect_rule is not None and not isinstance(expect_rule, str):
+            raise PolicyError(f"{where}: 'expect_rule' must be a string")
+
+        # Deliberately not run through `validate_conditions`: these are the values
+        # a request carries, not operators on them.
+        params = raw_case.get("params") or {}
+        context = raw_case.get("context") or {}
+
+        cases.append(
+            TestCase(
+                name=name,
+                resource=resource,
+                expect=expect,
+                params=_require_mapping(params, f"{where}: 'params'"),
+                context=_require_mapping(context, f"{where}: 'context'"),
+                expect_rule=expect_rule,
+            )
+        )
+
+    return cases
+
+
 def _parse_adapters(raw: dict) -> list[AdapterSpec]:
     raw_adapters = raw.get("adapters", [])
     if raw_adapters is None:
@@ -544,4 +642,5 @@ def parse_policy(raw: Any) -> Policy:
         rules=_parse_rules(raw),
         adapters=_parse_adapters(raw),
         pinned_context=pinned_context,
+        tests=_parse_tests(raw),
     )

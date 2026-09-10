@@ -90,10 +90,10 @@ impl Engine {
         Ok(Engine {
             policy: Policy {
                 // Only the fields `evaluate` reads are carried across. `version`,
-                // `audit_path`, `adapters`, `pinned_context` and `tools` belong to
-                // loading and introspection, which stay in Python, and inventing
-                // values for them here would be inventing a second source of
-                // truth for `validate` to disagree with.
+                // `audit_path`, `adapters`, `pinned_context`, `tests` and `tools`
+                // belong to loading and introspection, which stay in Python, and
+                // inventing values for them here would be inventing a second
+                // source of truth for `validate` to disagree with.
                 version: 2,
                 mode,
                 audit_path: String::new(),
@@ -102,6 +102,7 @@ impl Engine {
                 rules,
                 adapters: Vec::new(),
                 pinned_context: Vec::new(),
+                tests: Vec::new(),
                 tools: None,
             },
         })

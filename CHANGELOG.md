@@ -4,6 +4,57 @@
 
 ### Added
 
+- `tests:` blocks, specified in 0.3.1 and implemented here. A policy file states
+  what is allowed; a `tests:` block states what the author *believed* it allowed,
+  as cases the tool can check — `resource`, `params`, `context`, `expect` of
+  `allow`/`deny`/`review`/`refused`, and an optional `expect_rule`. Strict
+  validation catches a misspelled key; it cannot catch a correctly spelled rule in
+  the wrong order, and rule order is first-match-wins. `expect_rule` is what
+  closes that gap: a rule reordered above another leaves every `expect` satisfied
+  while the policy has changed meaning.
+
+  Run with `hydracuda test [policy.yaml]`, one line per case plus a summary count,
+  exit 0 when every case passes and 1 when any fails. Read-only in the same sense
+  `plan` is: nothing is executed, no audit record is written, the clock is not
+  read, and no file is opened beyond the policy itself — so a `tests:` block is
+  something CI can run on every commit and get the same answer.
+
+  Version 2 only. A version 1 file gets no new surface, and `tests` there is an
+  unrecognized key as it was before.
+
+  Five diagnostics come with it, reported by `validate` and by `test` before any
+  case runs: `test-duplicate-name`, `test-resource-is-a-pattern`,
+  `test-undeclared-resource`, `test-missing-pinned-context` and
+  `test-unread-context-field`. The first two are errors, which stop the run.
+
+- `hcuda`, a standalone binary with `validate`, `plan` and `test` and no Python,
+  no network and no runtime dependencies. Named `hcuda` rather than `hydracuda`
+  because the Python package's console script already owns that name, and two
+  executables sharing it would resolve by `PATH` order — silently running a
+  different implementation than the one asked for.
+
+  Its output is byte-identical to `hydracuda`'s apart from two lines, and
+  `tests/test_cli_parity.py` holds it to that by running both and diffing.
+  `hcuda validate` states the one check it cannot perform: building a declared
+  adapter needs the type registry, which lives in the Python package, so that gap
+  is printed rather than quietly skipped.
+
+- `--engine python|rust` on `validate`, `plan` and `test`, and the engine named in
+  every one of their outputs. One engine runs, not both, and the flag beats
+  `HYDRACUDA_ENGINE` — a consumer pinning `HYDRACUDA_ENGINE=python` for
+  reproducibility gets the same treatment from the CLI that the library gives it.
+  `hcuda` refuses a `python` pin with an error naming `python -m hydracuda test`,
+  rather than producing Rust decisions under a label nobody asked for.
+
+  `hydracuda test --compare-engines` opts into running both and reporting any
+  disagreement, exiting 3 — distinct from 1, because two engines diverging is a
+  bug in HYDRACUDA and not a finding about the policy, and a CI job has to be able
+  to tell those apart.
+
+- `python -m hydracuda`, equivalent to the `hydracuda` console script. Needed
+  because `hcuda` points at it by name, and that instruction has to work on a
+  machine where the console script was never put on `PATH`.
+
 - The decision engine can now run compiled. `hydracuda._core`, a PyO3 extension
   over the `hydracuda-core` crate, is used when it is present; the pure-Python
   engine is used when it is not. Both are supported, and both stay: a platform
@@ -29,13 +80,37 @@
 
 ### Documentation
 
-- `docs/policy-spec.md` specifies the `tests:` block: test case keys, how
-  `params`/`context` relate to `where`/`when`, `expect: refused` for adapter
-  boundary refusals, `expect_rule` for asserting *which* rule decided, six
-  diagnostics, and the non-goals. Specification only — the loader still rejects
-  `tests` as an unrecognized key and there is no `hydracuda test` command. Both
-  land in 0.4.0, and the section is marked accordingly so nobody reads it as
-  current behaviour.
+- `docs/policy-spec.md`'s `tests:` section is no longer marked unimplemented, and
+  its example is now a complete policy the loader accepts rather than a fragment.
+
+  Two things in it were corrected against the implementation. Only one of the two
+  refusals it described is reachable from a policy file: `build_adapter` declares
+  resources with no `path_parameters` and `normalize` canonicalizes only those, so
+  an adapter built from an `adapters:` block cannot refuse on confinement. A case
+  expecting that fails against whatever the rules decide — assert traversal with a
+  `deny` rule instead. The consequence is worth having, and is now stated: nothing
+  is canonicalized, so `test` reads no files and is reproducible anywhere.
+
+  Its `## Introspection` section said there were two read-only commands and that
+  `hydracuda test` was unimplemented. Three, and it is.
+
+  And `test-duplicate-name` and `test-resource-is-a-pattern` are hard errors
+  reported as diagnostics rather than load failures. The specification assigns them
+  codes and levels, and a diagnostic that can never fire — because loading already
+  refused the file — is worse than no diagnostic. They stay hard: an error-level
+  finding exits non-zero in both `validate` and `test`.
+
+- README documents `test`, `--engine`, `--compare-engines` and `hcuda`, and its
+  sample `validate`/`plan` output now shows the `Engine:` line the commands
+  actually print. A README transcript that no longer matches the command is how a
+  reader concludes their install is broken.
+
+- `examples/policy.yaml` has a `tests:` block: six cases covering the ordering the
+  file's comments already claimed mattered. The example previously asserted that
+  the narrow deny rules must sit above the broad allow rule and left the reader to
+  take that on faith; now reordering them fails. It is also what
+  `tests/test_cli_parity.py` diffs `hcuda test` against, so a shipped document
+  users copy is the fixture rather than a synthetic one.
 
 ## 0.3.1 — 2026-09-10
 

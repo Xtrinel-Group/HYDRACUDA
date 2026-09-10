@@ -256,6 +256,111 @@ def test_declared_resources_merges_adapters_and_concrete_rules():
     assert policy.declared_resources() == ["read_file", "execute_shell"]
 
 
+# --- test cases ----------------------------------------------------------
+
+
+_SURFACE = """
+version: 2
+adapters:
+  - {name: local, type: local_tools, resources: [fs.read]}
+"""
+
+
+def test_a_case_carries_literal_values():
+    policy = policy_from_yaml(
+        _SURFACE
+        + """
+rules:
+  - {name: reads, resource: fs.read, action: allow}
+tests:
+  - name: reads-are-allowed
+    resource: fs.read
+    params: {path: /srv/x}
+    context: {trust: verified}
+    expect: allow
+    expect_rule: reads
+"""
+    )
+    case = policy.tests[0]
+    assert case.name == "reads-are-allowed"
+    assert case.resource == "fs.read"
+    assert case.expect == "allow"
+    assert case.params == {"path": "/srv/x"}
+    assert case.context == {"trust": "verified"}
+    assert case.expect_rule == "reads"
+
+
+def test_params_and_context_default_to_empty():
+    policy = policy_from_yaml(
+        _SURFACE + "tests:\n  - {name: a, resource: fs.read, expect: deny}\n"
+    )
+    assert policy.tests[0].params == {}
+    assert policy.tests[0].context == {}
+    assert policy.tests[0].expect_rule is None
+
+
+def test_a_policy_without_a_tests_block_has_no_cases():
+    assert policy_from_yaml("version: 2\nrules: []\n").tests == []
+
+
+@pytest.mark.parametrize(
+    "case,message",
+    [
+        ("{resource: fs.read, expect: deny}", "'name' is required"),
+        ("{name: a, expect: deny}", "'resource' is required"),
+        ("{name: a, resource: fs.read}", "'expect' must be one of"),
+        ("{name: a, resource: fs.read, expect: maybe}", "'expect' must be one of"),
+        ("{name: a, resource: fs.read, expect: deny, expect_rule: 1}", "must be a string"),
+        ("{name: a, resource: fs.read, expect: deny, params: 'nope'}", "must be a mapping"),
+    ],
+)
+def test_a_malformed_case_is_a_load_error(case, message):
+    with pytest.raises(PolicyError, match=message):
+        policy_from_yaml(_SURFACE + f"tests:\n  - {case}\n")
+
+
+def test_an_unknown_case_key_is_rejected_with_a_suggestion():
+    with pytest.raises(PolicyError) as error:
+        policy_from_yaml(
+            _SURFACE
+            + "tests:\n  - {name: a, resource: fs.read, expect: deny, expectRule: r}\n"
+        )
+    assert "unrecognized key(s) ['expectRule']" in str(error.value)
+    assert "did you mean 'expect_rule'" in str(error.value)
+
+
+def test_a_named_case_identifies_itself_in_its_own_error():
+    """Later messages about a case have to say which case."""
+    with pytest.raises(PolicyError, match=r"tests\[0\] \('my-case'\)"):
+        policy_from_yaml(
+            _SURFACE + "tests:\n  - {name: my-case, resource: fs.read, expect: maybe}\n"
+        )
+
+
+def test_a_falsy_params_block_is_an_empty_mapping():
+    """`params: []` is empty, not a type error.
+
+    The loader reads it as `raw_case.get("params") or {}`, and the Rust loader
+    mirrors that, because two loaders that refuse different files are two
+    different formats.
+    """
+    policy = policy_from_yaml(
+        _SURFACE + "tests:\n  - {name: a, resource: fs.read, expect: deny, params: []}\n"
+    )
+    assert policy.tests[0].params == {}
+
+
+def test_tests_is_not_a_version_1_key():
+    """A legacy file gets no new surface."""
+    with pytest.raises(PolicyError, match=r"unrecognized key\(s\) \['tests'\]"):
+        policy_from_yaml("version: 1\ntools: {}\ntests: []\n")
+
+
+def test_tests_must_be_a_list():
+    with pytest.raises(PolicyError, match="'tests' must be a list"):
+        policy_from_yaml(_SURFACE + "tests: {}\n")
+
+
 # --- version 1 translation ----------------------------------------------
 
 

@@ -30,7 +30,7 @@ The goal is simple: prevent tool-call abuse and out-of-scope actions while keepi
   An unrecognized key is a load error, not a warning. A typo'd rule used to fail open — you believed a rule was active when it was not.
 
 - **Read-only introspection**  
-  `hydracuda validate` reports rules that do not mean what they appear to. `hydracuda plan` prints the decision for every declared resource without executing anything.
+  `hydracuda validate` reports rules that do not mean what they appear to. `hydracuda plan` prints the decision for every declared resource without executing anything. `hydracuda test` runs the policy's own `tests:` block — the requests its author says it should allow and refuse.
 
 - **Local audit logging**  
   Every decision is written to a SQLite audit log on disk. No telemetry, no external service, no cloud dependency. Policy evaluation is local and does not phone home.
@@ -81,9 +81,10 @@ Check it, then see what it decides:
 ```bash
 hydracuda validate          # schema errors, conflicting and unreachable rules
 hydracuda plan              # ALLOW/DENY/REVIEW for every declared resource
+hydracuda test              # run the policy's own `tests:` cases
 ```
 
-Both default to `hydracuda.yaml` in the current directory and both are read-only: no tool runs, no audit record is written, nothing on disk changes.
+All three default to `hydracuda.yaml` in the current directory and all three are read-only: no tool runs, no audit record is written, nothing on disk changes.
 
 ### Minimal integration example
 
@@ -127,6 +128,7 @@ In your real application, the LLM agent calls `proxy.call(...)` instead of invok
 hydracuda init                          Write a starter hydracuda.yaml
 hydracuda validate [file] [--strict]    Check a policy
 hydracuda plan     [file] [--reasons]   Show what it decides
+hydracuda test     [file]               Run the policy's `tests:` cases
 ```
 
 `validate` exits non-zero on an error. Warnings are reported but do not fail the
@@ -134,6 +136,7 @@ command unless you pass `--strict`, which is what you want in CI.
 
 ```
 $ hydracuda validate
+Engine: python    Loader: python
 Policy: hydracuda.yaml
 Version 2, mode enforce, default deny, 2 rule(s), 1 adapter(s)
 
@@ -158,6 +161,7 @@ are flagged rather than guessed at.
 
 ```
 $ hydracuda plan examples/policy.yaml
+Engine: python    Loader: python
 Policy: examples/policy.yaml
 Version 2, mode enforce, default deny, 4 rule(s), 1 adapter(s)
 
@@ -172,7 +176,79 @@ Declared surface: 3 resource(s). Evaluated with no parameters and no context.
 no parameters and no context, and the listed rules can change it for a real call.
 ```
 
+`test` runs the `tests:` block in the policy file itself: one case per request the
+author believes the policy should allow, deny, review, or refuse outright.
+Validation catches a misspelled key, but it cannot catch a correctly spelled rule
+in the wrong order — and order is what decides, because the first match wins.
+That is the gap `tests:` closes, and `expect_rule` is the part that closes it: a
+rule reordered above another can leave every expected *action* intact while the
+policy has changed meaning.
+
+```
+$ hydracuda test examples/policy.yaml
+Engine: python    Loader: python
+Policy: examples/policy.yaml
+Version 2, mode enforce, default deny, 4 rule(s), 1 adapter(s)
+
+  PASS         an-ordinary-read-is-allowed    read_file
+  PASS         traversal-is-denied            read_file
+  PASS         system-paths-are-denied        read_file
+  PASS         deletes-are-denied             delete_record
+  PASS         the-shell-is-held-for-review   execute_shell
+  PASS         an-undeclared-tool-is-refused  write_file
+
+6 passed, 0 failed of 6 case(s)
+```
+
+Exit 0 when every case passes, 1 when any fails. Like `validate` and `plan` it
+reads nothing but the policy file — no tool runs, no clock is read, no path is
+resolved against the filesystem — so the result is the same on any machine and
+cheap enough to run on every commit. The format is in
+[the spec](docs/policy-spec.md#test-cases-tests).
+
 `hydracuda check` still works as a deprecated alias for `validate`.
+
+### Which engine
+
+The decision engine ships twice: a compiled Rust extension used when it is
+present, and the pure-Python engine used when it is not. Both are supported and
+both stay. Every command names the one it used on its first line, and
+`--engine python|rust` pins it, taking precedence over `HYDRACUDA_ENGINE`:
+
+```bash
+hydracuda plan --engine python      # pin the interpreter, whatever is installed
+hydracuda test --compare-engines    # run both and diff; exit 3 on disagreement
+```
+
+`--compare-engines` is opt-in and exits 3 rather than 1, because two engines
+disagreeing is a bug in HYDRACUDA and not a finding about your policy. A CI job
+has to be able to tell those apart.
+
+### `hcuda`, without Python
+
+`hcuda` is a standalone binary with `validate`, `plan` and `test`, no interpreter
+and no runtime dependencies — for a CI image or a pre-commit hook that should not
+have to install a Python package to check a policy file. Its output is
+byte-identical to `hydracuda`'s, and `tests/test_cli_parity.py` holds it to that
+by running both and diffing.
+
+```bash
+cargo build --release -p hydracuda-cli   # target/release/hcuda
+hcuda validate                           # same output, same exit codes
+hcuda test examples/policy.yaml
+```
+
+Built from a checkout for now. Prebuilt binaries are not published yet.
+
+It is named `hcuda` rather than `hydracuda` because the Python package's console
+script already owns that name; two executables sharing it would resolve by `PATH`
+order, silently running a different implementation than the one you asked for.
+
+Two differences, both printed rather than implied. It contains only the Rust
+engine, so `HYDRACUDA_ENGINE=python` is a loud error naming `python -m hydracuda`
+instead of Rust decisions under a label nobody asked for. And building a declared
+adapter needs the adapter type registry, which lives in the Python package — so
+`hcuda validate` states that one check as skipped and runs every other.
 
 ---
 

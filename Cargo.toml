@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["core", "bindings/python"]
+members = ["core", "bindings/python", "cli"]
 
-# The Python bindings (`bindings/python`) and the standalone CLI (`cli`) join
-# this list in later steps of 0.4.0. `core` is the decision engine and nothing
-# else: no I/O, no clock, no network. That is the property the rest of the
-# release depends on, so it gets a crate of its own rather than a module inside
-# a binary.
+# `core` is the decision engine and nothing else: no I/O, no clock, no network.
+# That is the property the rest of the release depends on, so it gets a crate of
+# its own rather than a module inside a binary. `bindings/python` is the PyO3
+# extension the Python package loads, and `cli` is the standalone `hcuda` binary —
+# both are consumers of `core` and neither adds anything to it.
 [workspace.package]
 version = "0.4.0-dev"
 edition = "2021"

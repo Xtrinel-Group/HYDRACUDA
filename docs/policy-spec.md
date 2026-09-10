@@ -435,19 +435,22 @@ planned against; it cannot execute.
 
 ## Introspection
 
-Two read-only commands. Neither executes a tool, writes an audit record, or
-needs the dashboard running.
+Three read-only commands. None executes a tool, writes an audit record, or needs
+the dashboard running.
 
 ```
 hydracuda validate [policy.yaml] [--strict]
 hydracuda plan     [policy.yaml] [--reasons]
+hydracuda test     [policy.yaml]
 ```
 
-Both default to `hydracuda.yaml`. `validate` exits non-zero on an error, and on
-a warning too under `--strict`. `check` is a deprecated alias for `validate`.
+All three default to `hydracuda.yaml`. `validate` exits non-zero on an error, and
+on a warning too under `--strict`. `check` is a deprecated alias for `validate`.
+`test` is specified in [Test cases](#test-cases-tests).
 
-A third read-only command, `hydracuda test`, is specified in
-[Test cases](#test-cases-tests) but not implemented in 0.3.0.
+All three are also in the standalone `hcuda` binary, which needs no Python, with
+the two documented differences under [Running](#running): it contains only the
+Rust engine, and it cannot check that a declared adapter is buildable.
 
 ### `validate`
 
@@ -492,11 +495,6 @@ mistaken for a claim about every possible request.
 
 ## Test cases (`tests:`)
 
-> **Status: specified, not yet implemented.** The 0.3.0 loader rejects `tests:`
-> as an unrecognized key, and there is no `hydracuda test` command. This section
-> is the reviewed schema that 0.4.0 implements against. Nothing here describes
-> current behaviour — see [Top-level keys](#top-level-keys) for what loads today.
-
 A policy file states what is allowed. A `tests:` block states what the author
 *believed* it allowed, in a form the tool can check.
 
@@ -508,6 +506,28 @@ validation catches the misspelling class. It cannot catch a correctly spelled
 rule in the wrong order, and rule order is first-match-wins.
 
 ```yaml
+version: 2
+pinned_context: [agent, trust]
+
+adapters:
+  - name: filesystem
+    type: local_tools
+    resources: [filesystem.read_file]
+    config:
+      root: /workspace
+
+rules:
+  - name: block-sensitive-paths
+    resource: filesystem.read_file
+    action: deny
+    where:
+      path: {matches: ['\.\.', '^/etc/']}
+  - name: verified-agents-may-read
+    resource: filesystem.read_file
+    action: allow
+    when:
+      trust: {equals: verified}
+
 tests:
   - name: agent-may-read-project-files
     resource: filesystem.read_file
@@ -595,14 +615,23 @@ actually doing the work, or the reverse.
 ```
 
 Supporting `refused` means `hydracuda test` runs adapter normalization before
-evaluation, mirroring the order the proxy uses. **That has a cost worth stating:
-canonicalization touches the filesystem**, so a case with path parameters is
-only as reproducible as the tree it runs on — a symlink or a missing `root`
-changes the answer. That is a property of canonicalization, not of the test
-runner (see [Canonicalization is a check, not a
-lock](#what-is-not-guaranteed)). Point `root` at a fixture directory committed
-alongside the policy when you need a case to mean the same thing on every
-machine.
+evaluation, mirroring the order the proxy uses.
+
+**Only the first of the two is reachable from a policy file**, and the reason is
+worth knowing before you write a case expecting the second. Canonicalization
+applies to a resource's declared `path_parameters`, and those are supplied by the
+integrator calling `adapter.register(...)`. An adapter built from an `adapters:`
+block declares its resources with no path parameters, so `normalize()` rewrites
+nothing and cannot refuse. A case expecting a confinement refusal will therefore
+fail against whatever the rules decide — write a `deny` rule and
+`expect: deny` for traversal instead, which is what `block-sensitive-paths` above
+does.
+
+The consequence is a good one: because nothing is canonicalized, `test` reads no
+files and a `tests:` block is fully reproducible. Confinement is still enforced
+at runtime for an integrator-registered path parameter (see [Canonicalization is
+a check, not a lock](#what-is-not-guaranteed)); it is just not something this
+block can assert on.
 
 ### `expect_rule`
 
@@ -649,13 +678,28 @@ nothing about the deployment.
 ### Running
 
 ```
-hydracuda test [policy.yaml]
+hydracuda test [policy.yaml]      # the Python package
+hcuda test [policy.yaml]          # the standalone binary
 ```
 
 Exit code `0` when every case passes, `1` when any case fails, and the usual
 non-zero on a load or schema error. Output is one line per case plus a summary
 count, so a failure names the case, the expected decision, and the decision that
 was actually produced.
+
+Both commands state which engine decided, and run **one** engine rather than
+both: `--engine python|rust`, else `HYDRACUDA_ENGINE`, else whichever is
+available. A downstream consumer pinning `HYDRACUDA_ENGINE=python` for
+reproducibility gets the same treatment from `test` that the library gives it.
+`hydracuda test --compare-engines` opts into running both and reporting any
+disagreement, with an exit status distinct from a failing case.
+
+The two commands decide every case identically. One thing only `hydracuda test`
+can do is notice that an adapter *cannot be built* — `hcuda` has no adapter
+registry, so it reports that gap in its header rather than checking less
+silently. Cases whose adapter could not be built are reported `unsupported`,
+which is not a pass: it exits non-zero, because a case nobody ran is not a case
+that succeeded.
 
 `test` is read-only in the same sense `plan` is: no tool is executed, no audit
 record is written, no network call is made, and the clock is not read. The
@@ -680,7 +724,7 @@ Named because a test block invites all of it, and none of it is in this schema:
 ## Dashboard
 
 The dashboard is optional and downstream. HYDRACUDA runs fully headless: the
-core runtime and both CLI commands behave identically whether it is installed,
+core runtime and every CLI command behave identically whether it is installed,
 running, or absent.
 
 ```

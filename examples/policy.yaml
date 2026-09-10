@@ -53,3 +53,44 @@ rules:
   - name: shell-requires-approval
     resource: execute_shell
     action: review
+
+# What the rules above are supposed to decide, as cases `hydracuda test` checks.
+# Strict validation catches a misspelled key; it cannot catch a correctly spelled
+# rule in the wrong order, and order is what decides here. `expect_rule` is the
+# part that notices: moving `allow-file-reads` above `block-sensitive-paths`
+# leaves both `expect: deny` lines below unsatisfied instead of silently passing.
+tests:
+  - name: an-ordinary-read-is-allowed
+    resource: read_file
+    params: {path: notes.txt}
+    expect: allow
+    expect_rule: allow-file-reads
+
+  - name: traversal-is-denied
+    resource: read_file
+    params: {path: ../secrets/key.pem}
+    expect: deny
+    expect_rule: block-sensitive-paths
+
+  - name: system-paths-are-denied
+    resource: read_file
+    params: {path: /etc/passwd}
+    expect: deny
+    expect_rule: block-sensitive-paths
+
+  - name: deletes-are-denied
+    resource: delete_record
+    expect: deny
+    expect_rule: block-destructive-deletes
+
+  - name: the-shell-is-held-for-review
+    resource: execute_shell
+    expect: review
+    expect_rule: shell-requires-approval
+
+  # Not in the `adapters` block, so the boundary refuses it before any rule is
+  # consulted. `default_action: deny` would have denied it too — this asserts the
+  # stronger thing, that a resource nobody declared cannot be reached at all.
+  - name: an-undeclared-tool-is-refused
+    resource: write_file
+    expect: refused

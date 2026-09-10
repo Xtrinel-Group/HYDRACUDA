@@ -1,4 +1,4 @@
-"""Tests for policy introspection: `analyze` and `plan`.
+"""Tests for policy introspection: `analyze`, `plan` and `run_tests`.
 
 The CLI surface is tested in test_cli.py. These cover the analysis itself.
 """
@@ -7,7 +7,15 @@ import pytest
 import yaml
 
 from hydracuda.conditions import pattern_subsumes
-from hydracuda.introspect import ERROR, WARNING, analyze, plan
+from hydracuda.introspect import (
+    ERROR,
+    FAIL,
+    PASS,
+    WARNING,
+    analyze,
+    plan,
+    run_tests,
+)
 from hydracuda.policy import parse_policy
 
 
@@ -658,3 +666,290 @@ def test_plan_is_empty_without_a_declared_surface():
 def test_plan_is_deterministic(examples_dir):
     policy = _policy((examples_dir / "policy-advanced.yaml").read_text())
     assert plan(policy) == plan(policy)
+
+
+# --- test cases ----------------------------------------------------------
+
+_TESTED = """
+version: 2
+adapters:
+  - {name: local, type: local_tools, resources: [fs.read, fs.write]}
+rules:
+  - {name: block-etc, resource: fs.read, action: deny, where: {path: {matches: ['^/etc/']}}}
+  - {name: reads, resource: fs.read, action: allow}
+tests:
+  - {name: etc-is-denied, resource: fs.read, params: {path: /etc/passwd}, expect: deny}
+"""
+
+
+def test_a_case_that_matches_the_policy_passes():
+    results = run_tests(_policy(_TESTED))
+    assert [(r.name, r.status) for r in results] == [("etc-is-denied", PASS)]
+    assert results[0].passed
+    assert results[0].detail == ""
+
+
+def test_a_failing_case_names_both_decisions():
+    results = run_tests(_policy(_TESTED.replace("expect: deny", "expect: allow")))
+    assert results[0].status == FAIL
+    assert results[0].detail == "expected allow, got deny from block-etc"
+
+
+def test_expect_rule_catches_the_right_answer_for_the_wrong_reason():
+    """Both rules deny, so `expect` alone passes either way.
+
+    This is the reordering `expect_rule` exists to catch: with first-match-wins, a
+    rule moved above another leaves every `expect` satisfied while the policy has
+    changed meaning.
+    """
+    policy = _policy(
+        """
+        version: 2
+        adapters:
+          - {name: local, type: local_tools, resources: [fs.read]}
+        rules:
+          - {name: broad, resource: 'fs.*', action: deny}
+          - {name: specific, resource: fs.read, action: deny}
+        tests:
+          - {name: c, resource: fs.read, expect: deny, expect_rule: specific}
+        """
+    )
+    results = run_tests(policy)
+    assert results[0].status == FAIL
+    assert results[0].detail == "expected deny from 'specific', got deny from 'broad'"
+
+
+def test_an_undeclared_resource_is_refused_before_any_rule():
+    policy = _policy(
+        """
+        version: 2
+        adapters:
+          - {name: local, type: local_tools, resources: [fs.read]}
+        rules:
+          - {name: broad, resource: 'fs.**', action: allow}
+        tests:
+          - {name: refused, resource: fs.chmod, expect: refused}
+          - {name: wrong, resource: fs.chmod, expect: allow}
+        """
+    )
+    results = run_tests(policy)
+    assert results[0].status == PASS
+    assert results[1].status == FAIL
+    assert "no adapter declares 'fs.chmod'" in results[1].detail
+
+
+def test_a_declared_resource_is_never_refused():
+    """Only the undeclared-resource refusal is reachable from a policy file.
+
+    `build_adapter` declares each resource with no `path_parameters`, and
+    `normalize` canonicalizes only those — so an adapter built from an `adapters:`
+    block rewrites nothing and cannot refuse on confinement. The consequence worth
+    keeping is that `run_tests` reads no files.
+    """
+    policy = _policy(
+        """
+        version: 2
+        adapters:
+          - {name: local, type: local_tools, resources: [fs.read], config: {root: /workspace}}
+        rules:
+          - {name: reads, resource: fs.read, action: allow}
+        tests:
+          - {name: c, resource: fs.read, params: {path: ../../etc/passwd}, expect: refused}
+        """
+    )
+    results = run_tests(policy)
+    assert results[0].status == FAIL
+    assert results[0].detail == "expected refused, got allow from reads"
+
+
+def test_without_adapters_there_is_no_boundary_to_refuse_at():
+    """`ToolCallProxy` skips normalization when built without an adapter.
+
+    So a policy declaring none refuses nothing, and `expect: refused` cannot pass.
+    Refusing here instead would fail every case in a rules-only policy for a
+    reason that never occurs at runtime.
+    """
+    policy = _policy(
+        """
+        version: 2
+        default_action: allow
+        rules:
+          - {name: reads, resource: fs.read, action: allow}
+        tests:
+          - {name: evaluated, resource: fs.read, expect: allow}
+          - {name: impossible, resource: fs.read, expect: refused}
+        """
+    )
+    results = run_tests(policy)
+    assert results[0].status == PASS
+    assert results[1].status == FAIL
+    assert "declares no adapters" in results[1].detail
+
+
+def test_run_tests_is_deterministic():
+    policy = _policy(_TESTED)
+    assert run_tests(policy) == run_tests(policy)
+
+
+def test_a_policy_with_no_cases_runs_nothing():
+    assert run_tests(_policy("version: 2\nrules: []\n")) == []
+
+
+# --- test-case diagnostics -----------------------------------------------
+
+
+def test_duplicate_case_names_are_an_error():
+    """Stricter than duplicate rule names, which are a warning.
+
+    Rule names may be generated by version 1 translation; test names are always
+    hand-written, and the output is per-case pass/fail, so two cases sharing a
+    name make that report unreadable.
+    """
+    report = analyze(
+        _policy(
+            """
+            version: 2
+            adapters:
+              - {name: local, type: local_tools, resources: [fs.read]}
+            rules:
+              - {name: reads, resource: fs.read, action: allow}
+            tests:
+              - {name: same, resource: fs.read, expect: allow}
+              - {name: same, resource: fs.read, expect: allow}
+            """
+        )
+    )
+    assert codes(report) == ["test-duplicate-name"]
+    assert report.diagnostics[0].level == ERROR
+    assert report.diagnostics[0].location == "tests[1] same"
+    assert "tests[0]" in report.diagnostics[0].message
+
+
+def test_a_wildcard_resource_is_an_error():
+    report = analyze(
+        _policy(
+            """
+            version: 2
+            adapters:
+              - {name: local, type: local_tools, resources: [fs.read]}
+            rules:
+              - {name: reads, resource: 'fs.*', action: allow}
+            tests:
+              - {name: c, resource: 'fs.*', expect: allow}
+            """
+        )
+    )
+    assert "test-resource-is-a-pattern" in codes(report)
+    pattern = next(
+        d for d in report.diagnostics if d.code == "test-resource-is-a-pattern"
+    )
+    assert pattern.level == ERROR
+
+
+def test_a_diagnostic_rather_than_a_load_error():
+    """Both hard findings above load fine, on purpose.
+
+    The specification assigns them codes and levels in the diagnostic table, and a
+    diagnostic that can never fire — because loading already refused the file — is
+    worse than no diagnostic. They stay hard: an error-level finding exits
+    non-zero in both `validate` and `test`.
+    """
+    policy = _policy(
+        """
+        version: 2
+        rules: []
+        tests:
+          - {name: same, resource: 'fs.*', expect: allow}
+          - {name: same, resource: 'fs.*', expect: allow}
+        """
+    )
+    assert len(policy.tests) == 2
+    assert len(analyze(policy).errors) == 3
+
+
+def test_an_undeclared_resource_is_a_warning():
+    report = analyze(
+        _policy(
+            """
+            version: 2
+            adapters:
+              - {name: local, type: local_tools, resources: [fs.read]}
+            rules:
+              - {name: reads, resource: 'fs.**', action: allow}
+            tests:
+              - {name: c, resource: fs.chmod, expect: allow}
+              - {name: fine, resource: fs.chmod, expect: refused}
+            """
+        )
+    )
+    undeclared = [d for d in report.diagnostics if d.code == "test-undeclared-resource"]
+    assert len(undeclared) == 1, "expect: refused is the documented way to say this"
+    assert undeclared[0].level == WARNING
+    assert undeclared[0].location == "tests[0] c"
+
+
+def test_no_undeclared_warning_without_a_declared_surface():
+    """With no adapters there is no surface to be outside of."""
+    report = analyze(
+        _policy(
+            """
+            version: 2
+            rules:
+              - {name: reads, resource: fs.read, action: allow}
+            tests:
+              - {name: c, resource: fs.chmod, expect: deny}
+            """
+        )
+    )
+    assert "test-undeclared-resource" not in codes(report)
+
+
+def test_a_case_missing_a_pinned_context_field_is_a_warning():
+    """The `tests:` block's version of `unpinned-when-field`.
+
+    A policy that gates on `trust` and a suite that never sets it will agree with
+    each other and say nothing about the deployment.
+    """
+    report = analyze(
+        _policy(
+            """
+            version: 2
+            pinned_context: [trust, agent]
+            adapters:
+              - {name: local, type: local_tools, resources: [fs.read]}
+            rules:
+              - {name: gated, resource: fs.read, action: allow, when: {trust: {equals: high}}}
+            tests:
+              - {name: c, resource: fs.read, context: {trust: high}, expect: allow}
+            """
+        )
+    )
+    missing = next(
+        d for d in report.diagnostics if d.code == "test-missing-pinned-context"
+    )
+    assert missing.level == WARNING
+    assert "['agent']" in missing.message
+
+
+def test_a_context_field_no_rule_reads_is_a_warning():
+    report = analyze(
+        _policy(
+            """
+            version: 2
+            adapters:
+              - {name: local, type: local_tools, resources: [fs.read]}
+            rules:
+              - {name: gated, resource: fs.read, action: allow, when: {trust: {equals: high}}}
+            tests:
+              - {name: c, resource: fs.read, context: {trust: high, trsut: high}, expect: allow}
+            """
+        )
+    )
+    unread = next(d for d in report.diagnostics if d.code == "test-unread-context-field")
+    assert unread.level == WARNING
+    assert "['trsut']" in unread.message
+
+
+def test_a_clean_tests_block_produces_no_findings_of_its_own():
+    report = analyze(_policy(_TESTED))
+    assert [c for c in codes(report) if c.startswith("test-")] == []
