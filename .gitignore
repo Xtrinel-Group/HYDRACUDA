@@ -16,3 +16,7 @@ hydracuda.yaml
 .baracuda/
 .hydracuda/
 hydracuda-favicon.zip
+
+# Cargo build output. `Cargo.lock` is committed on purpose: this workspace
+# produces a published binary, so the build must be reproducible.
+/target/

@@ -1,0 +1,502 @@
+# The differential corpus: inputs both engines must agree on.
+#
+# `scripts/record_differential.py` runs every case below through the Python
+# implementation and writes `expected.json`. `core/tests/differential.rs` replays
+# the same cases through the Rust implementation and compares. Neither file is
+# generated at test time, so `cargo test` needs no Python — and
+# `tests/test_differential.py` fails if the recording has gone stale, so the
+# golden file cannot quietly drift away from the Python engine it came from.
+#
+# Add a case whenever a behaviour is worth pinning across both engines. A case
+# that only one engine can express does not belong here; it belongs in that
+# engine's own tests.
+
+# How `yaml.safe_load` resolves a plain scalar. This section exists because the
+# YAML dialect is part of the decision: `allow: no` is a boolean in YAML 1.1 and
+# a string in YAML 1.2.
+scalars:
+  - "no"
+  - "No"
+  - "NO"
+  - "yes"
+  - "on"
+  - "off"
+  - "true"
+  - "True"
+  - "TRUE"
+  - "false"
+  - "y"
+  - "n"
+  - "~"
+  - "null"
+  - "NULL"
+  - "Null"
+  - "0"
+  - "00"
+  - "012"
+  - "08"
+  - "0o17"
+  - "0x1f"
+  - "0X1F"
+  - "0b101"
+  - "1_000"
+  - "+1"
+  - "-7"
+  - "1:30"
+  - "10:20:30"
+  - "1:30.5"
+  - ".5"
+  - "5."
+  - "-1.5"
+  - "1.0e+5"
+  - "1e5"
+  - "1.0e5"
+  - "1e+5"
+  - "1E+5"
+  - ".inf"
+  - "-.INF"
+  - ".nan"
+  - "2026-09-09"
+  - "2026-9-9"
+  - "'no'"
+  - '"012"'
+  - "not-a-number"
+  - "1.2.3"
+  - "fs.**"
+
+# `matches`/`not_matches` compile these, and Python's `re.search` is the
+# reference. The end-of-string anchors are the ones that matter: a Rust engine
+# that matched *less* than Python would let a denied call through.
+regexes:
+  - pattern: 'passwd$'
+    subjects: ["/etc/passwd", "/etc/passwd\n", "/etc/passwd\n\n", "/etc/passwd\nx", "/etc/passwd_backup"]
+  - pattern: 'passwd\Z'
+    subjects: ["/etc/passwd", "/etc/passwd\n"]
+  - pattern: '^/etc/'
+    subjects: ["/etc/hosts", "x/etc/hosts", "/etc"]
+  - pattern: '\.\.'
+    subjects: ["../etc", "a..b", "a.b"]
+  - pattern: '^(?!/tmp/).*\.key$'
+    subjects: ["/etc/tls.key", "/tmp/tls.key", "/etc/tls.key\n", "/etc/tls.pem"]
+  - pattern: '(?P<seg>[a-z]+)/(?P=seg)'
+    subjects: ["etc/etc", "etc/var"]
+  - pattern: '[$]'
+    subjects: ["a$b", "ab"]
+  - pattern: 'cost\$'
+    subjects: ["cost$", "costs"]
+  - pattern: '(?m)^x$'
+    subjects: ["a\nx\nb", "ax", "x"]
+  - pattern: '(?i)SECRET'
+    subjects: ["secret", "SeCrEt", "public"]
+  - pattern: 'True'
+    subjects: ["True", "true", "False"]
+  - pattern: '^/proc/\d+'
+    subjects: ["/proc/1", "/proc/self", "/proc/12/status"]
+
+# The policy files the project actually ships, loaded from disk by both engines.
+# Synthetic cases test behaviours one at a time; these test the documents users
+# copy, so a divergence on one of them is a divergence users would hit.
+examples:
+  - path: examples/policy.yaml
+    requests:
+      - {resource: read_file, params: {path: /workspace/notes.md}}
+      - {resource: read_file, params: {path: /etc/passwd}}
+      - {resource: read_file, params: {path: ../secrets}}
+      - {resource: read_file, params: {path: /root/.ssh/id_rsa}}
+      - {resource: read_file}
+      - {resource: delete_record, params: {id: 7}}
+      - {resource: execute_shell, params: {cmd: ls}}
+      - {resource: write_file, params: {path: /workspace/x}}
+
+  - path: examples/policy-v1-legacy.yaml
+    requests:
+      - {resource: read_file, params: {path: /workspace/notes.md}}
+      - {resource: read_file, params: {path: /etc/passwd}}
+      - {resource: read_file, params: {path: ../secrets}}
+      - {resource: read_file, params: {path: /root/.ssh/id_rsa}}
+      - {resource: read_file}
+      - {resource: delete_record, params: {id: 7}}
+      - {resource: execute_shell, params: {cmd: ls}}
+      - {resource: write_file, params: {path: /workspace/x}}
+
+  - path: examples/policy-advanced.yaml
+    requests:
+      - {resource: filesystem.read_file, params: {path: /workspace/a, mode: read}, context: {trust: trusted}}
+      - {resource: filesystem.read_file, params: {path: /workspace/a, mode: read}, context: {trust: untrusted}}
+      - {resource: filesystem.write_file, params: {path: /workspace/a, mode: write}, context: {trust: untrusted}}
+      - {resource: filesystem.write_file, params: {path: /workspace/a, mode: write}, context: {trust: trusted}}
+      - {resource: filesystem.write_file, params: {path: /etc/hosts, mode: write}, context: {trust: trusted}}
+      - {resource: filesystem.write_file, params: {mode: write}, context: {trust: trusted}}
+      - {resource: filesystem.delete_file, params: {path: /workspace/a, mode: write}, context: {trust: trusted}}
+      - {resource: filesystem.read_file, params: {path: /workspace/a}, context: {trust: untrusted}}
+      - {resource: github.repository.read, context: {trust: trusted}}
+      - {resource: github.repository.write, context: {trust: trusted}}
+      - {resource: github.issue.comment, context: {trust: trusted}}
+      - {resource: github.repository.read, params: {mode: write}, context: {trust: untrusted}}
+      - {resource: unknown.resource, context: {trust: trusted}}
+
+# Policies, each replayed against every request under it. A policy that fails to
+# load is a case too: the two engines must reject the same file with the same
+# message.
+policies:
+  - name: empty-version-2-fails-closed
+    policy: |
+      version: 2
+      rules: []
+    requests:
+      - resource: fs.read
+      - resource: ""
+
+  - name: first-match-wins
+    policy: |
+      version: 2
+      rules:
+        - {name: broad, resource: 'fs.**', action: allow}
+        - {name: narrow, resource: fs.read, action: deny}
+    requests:
+      - resource: fs.read
+      - resource: fs.write.bytes
+      - resource: fs
+      - resource: net.get
+
+  - name: resource-wildcards
+    policy: |
+      version: 2
+      default_action: allow
+      rules:
+        - {name: one-segment, resource: 'fs.*', action: deny}
+        - {name: prefix, resource: 'net.read_*', action: review}
+        - {name: middle, resource: 'db.**.write', action: deny}
+    requests:
+      - resource: fs.read
+      - resource: fs.read.bytes
+      - resource: fs
+      - resource: net.read_all
+      - resource: net.read
+      - resource: db.write
+      - resource: db.users.write
+      - resource: db.users.rows.write
+      - resource: db.users.read
+
+  - name: where-and-when-must-both-hold
+    policy: |
+      version: 2
+      default_action: allow
+      rules:
+        - name: block-etc-in-prod
+          resource: fs.read
+          action: deny
+          reason: "reading {resource} outside dev is refused"
+          where:
+            path: {matches: ['^/etc/']}
+          when:
+            environment: {equals: prod}
+    requests:
+      - resource: fs.read
+        params: {path: /etc/passwd}
+        context: {environment: prod}
+      - resource: fs.read
+        params: {path: /etc/passwd}
+        context: {environment: dev}
+      - resource: fs.read
+        params: {path: /tmp/x}
+        context: {environment: prod}
+      - resource: fs.read
+        params: {path: /etc/passwd}
+      - resource: fs.write
+        params: {path: /etc/passwd}
+        context: {environment: prod}
+
+  - name: every-operator
+    policy: |
+      version: 2
+      default_action: allow
+      rules:
+        - {name: eq, resource: op.eq, action: deny, where: {v: {equals: 1}}}
+        - {name: ne, resource: op.ne, action: deny, where: {v: {not_equals: 1}}}
+        - {name: in, resource: op.in, action: deny, where: {v: {in: [0, 'a', null]}}}
+        - {name: nin, resource: op.nin, action: deny, where: {v: {not_in: [0, 'a']}}}
+        - {name: m, resource: op.m, action: deny, where: {v: {matches: ['^x']}}}
+        - {name: nm, resource: op.nm, action: deny, where: {v: {not_matches: ['^x']}}}
+        - {name: p, resource: op.p, action: deny, where: {v: {present: true}}}
+        - {name: np, resource: op.np, action: deny, where: {v: {present: false}}}
+        - {name: a, resource: op.a, action: deny, where: {v: {absent: true}}}
+        - {name: na, resource: op.na, action: deny, where: {v: {absent: false}}}
+    requests:
+      - {resource: op.eq, params: {v: 1}}
+      - {resource: op.eq, params: {v: 1.0}}
+      - {resource: op.eq, params: {v: true}}
+      - {resource: op.eq, params: {v: 2}}
+      - {resource: op.eq, params: {v: "1"}}
+      - {resource: op.eq}
+      - {resource: op.ne, params: {v: 1}}
+      - {resource: op.ne, params: {v: 2}}
+      - {resource: op.ne}
+      - {resource: op.in, params: {v: 0}}
+      - {resource: op.in, params: {v: false}}
+      - {resource: op.in, params: {v: 'a'}}
+      - {resource: op.in, params: {v: null}}
+      - {resource: op.in, params: {v: 'b'}}
+      - {resource: op.nin, params: {v: 'b'}}
+      - {resource: op.nin, params: {v: false}}
+      - {resource: op.m, params: {v: xyz}}
+      - {resource: op.m, params: {v: axyz}}
+      - {resource: op.m, params: {v: 1}}
+      - {resource: op.nm, params: {v: xyz}}
+      - {resource: op.nm, params: {v: axyz}}
+      - {resource: op.p, params: {v: null}}
+      - {resource: op.p}
+      - {resource: op.np, params: {v: 1}}
+      - {resource: op.np}
+      - {resource: op.a, params: {v: 1}}
+      - {resource: op.a}
+      - {resource: op.na, params: {v: 1}}
+      - {resource: op.na}
+
+  - name: matches-stringifies-the-value
+    policy: |
+      version: 2
+      default_action: allow
+      rules:
+        - {name: t, resource: s.bool, action: deny, where: {v: {matches: ['^True$']}}}
+        - {name: n, resource: s.null, action: deny, where: {v: {matches: ['^None$']}}}
+        - {name: f, resource: s.float, action: deny, where: {v: {matches: ['^1\.0$']}}}
+        - {name: l, resource: s.list, action: deny, where: {v: {matches: ["^\\['a', 1\\]$"]}}}
+        - {name: d, resource: s.dict, action: deny, where: {v: {matches: ["^\\{'k': 'v'\\}$"]}}}
+    requests:
+      - {resource: s.bool, params: {v: true}}
+      - {resource: s.bool, params: {v: "True"}}
+      - {resource: s.bool, params: {v: "true"}}
+      - {resource: s.null, params: {v: null}}
+      - {resource: s.null, params: {v: "None"}}
+      - {resource: s.float, params: {v: 1.0}}
+      - {resource: s.float, params: {v: 1}}
+      - {resource: s.list, params: {v: ['a', 1]}}
+      - {resource: s.dict, params: {v: {k: v}}}
+
+  - name: shadow-mode-does-not-enforce
+    policy: |
+      version: 2
+      mode: shadow
+      rules:
+        - {name: d, resource: fs.read, action: deny}
+        - {name: r, resource: fs.stat, action: review}
+        - {name: a, resource: fs.write, action: allow}
+    requests:
+      - resource: fs.read
+      - resource: fs.stat
+      - resource: fs.write
+      - resource: fs.other
+
+  - name: review-mode-enforces
+    policy: |
+      version: 2
+      mode: review
+      rules:
+        - {name: d, resource: fs.read, action: deny}
+    requests:
+      - resource: fs.read
+
+  - name: default-reason-is-a-template
+    policy: |
+      version: 2
+      default_action: review
+      default_reason: "{resource} needs sign-off ({action})"
+      rules: []
+    requests:
+      - resource: fs.read
+
+  - name: default-reason-that-cannot-be-formatted
+    policy: |
+      version: 2
+      default_reason: 'quantifier a{2,3} and {"json": true}'
+      rules: []
+    requests:
+      - resource: fs.read
+
+  - name: audit-and-pinned-context
+    policy: |
+      version: 2
+      audit_path: /tmp/hydracuda-audit.jsonl
+      pinned_context: [environment]
+      default_action: allow
+      rules:
+        - name: r
+          resource: fs.read
+          action: deny
+          when:
+            environment: {equals: prod}
+            agent: {equals: bot}
+    requests:
+      - {resource: fs.read, context: {environment: prod, agent: bot}}
+      - {resource: fs.read, context: {environment: prod}}
+
+  - name: adapters-declare-the-surface
+    policy: |
+      version: 2
+      adapters:
+        - name: local
+          type: local_tools
+          resources:
+            - fs.read
+            - fs.write
+          config: {root: /tmp}
+      rules:
+        - {name: r, resource: 'fs.**', action: allow}
+    requests:
+      - resource: fs.read
+
+  - name: version-1-translates-to-ordered-rules
+    policy: |
+      version: 1
+      tools:
+        read_file:
+          parameter_rules:
+            path:
+              deny_patterns: ['\.\.', '^/etc/']
+        write_file:
+          allow: false
+          reason: "writes are off"
+        review_file:
+          allow: review
+        run:
+          allow: true
+    requests:
+      - {resource: read_file, params: {path: /tmp/a}}
+      - {resource: read_file, params: {path: ../etc}}
+      - {resource: read_file, params: {path: /etc/passwd}}
+      - {resource: read_file}
+      - {resource: write_file}
+      - {resource: review_file}
+      - {resource: run}
+      - {resource: deploy}
+
+  - name: version-1-allow-no-is-a-yaml-boolean
+    policy: |
+      version: 1
+      tools:
+        t:
+          allow: no
+    requests:
+      - resource: t
+
+  - name: version-1-allow-zero-is-a-fail-open-quirk
+    policy: |
+      version: 1
+      tools:
+        t:
+          allow: 0
+    requests:
+      - resource: t
+
+  - name: version-1-empty-reason-falls-back-to-the-action
+    policy: |
+      version: 1
+      tools:
+        t:
+          allow: false
+          reason: ""
+    requests:
+      - resource: t
+
+  # Load errors. The message text is compared, not just the failure.
+  - name: error-unknown-top-level-key
+    policy: |
+      version: 2
+      rulez: []
+  - name: error-camel-case-drift
+    policy: |
+      version: 2
+      defaultAction: allow
+      rules: []
+  - name: error-rate-limit-is-rejected
+    policy: |
+      version: 2
+      rate_limit: 10
+      rules: []
+  - name: error-tests-block-is-not-recognized-yet
+    policy: |
+      version: 2
+      rules: []
+      tests: []
+  - name: error-missing-version
+    policy: |
+      rules: []
+  - name: error-version-is-a-bool
+    policy: |
+      version: true
+      rules: []
+  - name: error-unsupported-version
+    policy: |
+      version: 3
+      rules: []
+  - name: error-bad-mode
+    policy: |
+      version: 2
+      mode: audit
+      rules: []
+  - name: error-not-a-mapping
+    policy: |
+      - 1
+  - name: error-empty-file
+    policy: ""
+  - name: error-rule-without-resource
+    policy: |
+      version: 2
+      rules:
+        - {action: allow}
+  - name: error-rule-without-action
+    policy: |
+      version: 2
+      rules:
+        - {resource: fs.read}
+  - name: error-rule-with-bad-action
+    policy: |
+      version: 2
+      rules:
+        - {resource: fs.read, action: permit}
+  - name: error-unknown-operator
+    policy: |
+      version: 2
+      rules:
+        - {resource: fs.read, action: deny, where: {path: {contains: etc}}}
+  - name: error-operator-typo-gets-a-suggestion
+    policy: |
+      version: 2
+      rules:
+        - {resource: fs.read, action: deny, where: {path: {matchs: etc}}}
+  - name: error-malformed-regex
+    policy: |
+      version: 2
+      rules:
+        - {resource: fs.read, action: deny, where: {path: {matches: ['(']}}}
+  - name: error-present-must-be-a-boolean
+    policy: |
+      version: 2
+      rules:
+        - {resource: fs.read, action: deny, where: {path: {present: 1}}}
+  - name: error-in-must-be-a-list
+    policy: |
+      version: 2
+      rules:
+        - {resource: fs.read, action: deny, where: {path: {in: etc}}}
+  - name: error-version-1-requires-tools
+    policy: |
+      version: 1
+  - name: error-version-1-bad-allow
+    policy: |
+      version: 1
+      tools:
+        t:
+          allow: maybe
+  - name: error-adapter-without-type
+    policy: |
+      version: 2
+      rules: []
+      adapters:
+        - name: local
+  - name: error-unknown-rule-key
+    policy: |
+      version: 2
+      rules:
+        - {resource: fs.read, action: allow, wher: {}}
