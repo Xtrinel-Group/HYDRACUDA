@@ -1,0 +1,104 @@
+# HYDRACUDA policy — version 2, namespaced resources.
+#
+# Shows the parts of the specification the direct migration in
+# examples/policy.yaml does not need: dotted resource namespaces, wildcard
+# patterns, `when` conditions on evaluation context, and shadow mode.
+
+# Compute every decision and write it to the audit log, but execute the call
+# regardless. Use this to trial a policy against live traffic before
+# switching to `enforce`.
+version: 2
+mode: shadow
+default_action: deny
+audit_path: .hydracuda/audit.db
+
+# `trust` gates the first rule below, so it must be established out of band
+# before enforcement starts. ToolCallProxy refuses to construct without it,
+# and no per-call context can change it. See docs/policy-spec.md, Trust model.
+pinned_context:
+  - trust
+
+adapters:
+  - name: fs
+    type: local_tools
+    resources:
+      - filesystem.read_file
+      - filesystem.write_file
+      - filesystem.delete_file
+    config:
+      # Every declared path parameter is resolved and required to land inside
+      # this root. The `no-writes-outside-workspace` rule below expresses the
+      # same intent as a pattern, which catches fewer spellings — keep both.
+      root: /workspace
+
+  # No GitHub adapter type ships yet. Declaring these under `local_tools` still
+  # gives `plan` the surface to walk; the handlers live in the integrator's
+  # process, and none of these resources carry a path parameter.
+  - name: gh
+    type: local_tools
+    resources:
+      - github.repository.read
+      - github.repository.write
+      - github.issue.comment
+
+rules:
+  # `when` tests the caller-supplied context map rather than the request
+  # parameters, so an untrusted agent can be held to a narrower surface than
+  # the same tool exposes to a trusted one.
+  - name: untrusted-agents-read-only
+    resource: "**"
+    action: deny
+    reason: "untrusted agents may not perform write actions"
+    when:
+      trust:
+        equals: untrusted
+    where:
+      mode:
+        not_equals: read
+
+  # An absent field satisfies no value operator, so the rule above does not fire
+  # on a request that omits `mode` entirely. Negative conditions need this
+  # companion rule to be airtight; `hydracuda validate` reports the pairing when
+  # it is missing.
+  - name: untrusted-agents-must-state-a-mode
+    resource: "**"
+    action: deny
+    reason: "untrusted agents must state the mode of the action"
+    when:
+      trust:
+        equals: untrusted
+    where:
+      mode:
+        absent: true
+
+  - name: no-writes-outside-workspace
+    resource: filesystem.write_*
+    action: deny
+    reason: "writes are confined to /workspace"
+    where:
+      path:
+        not_matches: ["^/workspace/"]
+
+  - name: writes-must-state-a-path
+    resource: filesystem.write_*
+    action: deny
+    reason: "a write must state the path it targets"
+    where:
+      path:
+        absent: true
+
+  - name: deletes-need-approval
+    resource: filesystem.delete_file
+    action: review
+
+  - name: allow-filesystem
+    resource: filesystem.**
+    action: allow
+
+  - name: github-reads-allowed
+    resource: github.*.read
+    action: allow
+
+  - name: github-writes-need-approval
+    resource: github.**
+    action: review

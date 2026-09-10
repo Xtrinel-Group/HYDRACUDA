@@ -28,5 +28,48 @@ Issues = "https://github.com/Xtrinel-Group/HYDRACUDA/issues"
 [project.scripts]
 hydracuda = "hydracuda.cli:main"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.21",
+]
+# The dashboard is not distributed — see the sdist configuration below. This
+# extra is for working from a git checkout: pip install -e ".[dashboard]".
+dashboard = [
+    "flask>=3.0",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/hydracuda"]
+
+# Curated deliberately. Hatchling's default sdist is "every file git does not
+# ignore", which is how the dashboard reached PyPI: it was never in the wheel,
+# so nobody noticed the sdist carried it, and a cross-site scripting bug in it
+# shipped in the v0.2.0 source distribution. That default also shipped CI
+# configuration and the retired `deprecation/baracuda` package.
+#
+# The dashboard is intentionally absent from both artifacts. It is an optional
+# development tool, run from a checkout, and `dashboard` is far too generic a
+# name to install into site-packages. Anything added here is something users
+# receive, so add deliberately.
+#
+# Patterns are gitignore-style, so they are anchored with a leading slash.
+# Unanchored "README.md" also matched deprecation/README.md.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src/hydracuda",
+    "/tests",
+    "/examples",
+    "/docs",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+]
+# `.gitignore` is still added: hatchling force-includes it and an `exclude`
+# entry does not override that. Left as-is rather than left as a config line
+# that asserts a control it does not have. It lists only filenames, nothing
+# sensitive.
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
