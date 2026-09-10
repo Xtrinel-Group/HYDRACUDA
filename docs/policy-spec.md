@@ -751,11 +751,17 @@ Translation, per tool, in order:
 | `allow: true` + `parameter_rules` | one `action: deny` rule per `deny_patterns` entry, in file order, then a trailing `action: allow` rule |
 | tool absent from `tools` | falls through to `default_action: deny` |
 
-Three v1 behaviours are worth calling out:
+Four v1 behaviours are worth calling out:
 
 - Per-tool `reason` is now honoured. In v0.2.0 it was parsed and discarded, so
   a denial always read `tool blocked by policy` regardless of what the policy
   said.
+- **`allow` must be a boolean or the string `"review"`.** An integer is a load
+  error, including `0` and `1`. YAML's other spellings of a boolean are fine:
+  `no`, `off` and `false` all deny. Before 0.3.1, `allow: 0` loaded and *allowed*
+  the tool, because validation compared by value (`0 == False`) while the deny
+  branch compared by identity. If a policy is generated from a source that
+  spells booleans as 0/1, emit `true`/`false`.
 - `audit.path` (the nested form in the v0.2.0 README) is now honoured as a
   deprecated alias for `audit_path`. In v0.2.0 it was silently ignored and the
   audit log went to the default location instead. Prefer `audit_path`.
