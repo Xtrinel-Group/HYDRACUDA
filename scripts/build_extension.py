@@ -9,9 +9,11 @@ resolves to `src/hydracuda/` and a module maturin installs into
 `site-packages/hydracuda/` would never be imported. So the wheel is built and the
 one file that matters is copied to where the import will actually find it.
 
-The module is deliberately not committed and not packaged here — `pyproject.toml`
-still builds the pure-Python distribution. Shipping the compiled engine in the
-published wheels is Step 4 of the v0.4.0 work.
+The module is deliberately not committed. It is packaged, but not by this script:
+`maturin build` reads `[tool.maturin]` in `pyproject.toml` and produces a platform
+wheel with the module inside it, which is what the release workflow ships. This
+script exists for the checkout, where an editable install means the wheel is the
+wrong shape and only the module's location matters.
 """
 
 from __future__ import annotations

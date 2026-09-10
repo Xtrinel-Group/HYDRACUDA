@@ -1,5 +1,81 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Platform wheels carrying the compiled engine, for macOS arm64, macOS x86_64,
+  Linux x86_64 and Windows x86_64, alongside the universal `py3-none-any` wheel.
+  `pip install hydracuda` gets the Rust engine on those four and the pure-Python
+  engine everywhere else, with no Rust toolchain required either way. The sdist
+  stays pure Python for the same reason, so a source install needs no `cargo`.
+
+  One set of `[project]` metadata produces both kinds of wheel: hatchling builds
+  the sdist and the universal wheel, and `maturin build` reads a `[tool.maturin]`
+  section in the same `pyproject.toml`. maturin's CLI does not need to be the
+  declared PEP 517 backend, only configured, which is what makes this possible —
+  so the two artifacts cannot disagree about the version, the dependencies, or the
+  console script. `bindings/python/pyproject.toml` existed only to stop maturin
+  naming its wheel `hydracuda`, which is now what it should do, so it is gone.
+
+  The exclusion of `*.so`/`*.pyd`/`*.dylib` from the universal wheel is now
+  permanent rather than a placeholder. A release builds both wheels from one
+  checkout, so without it whichever ran second would decide whether the artifact
+  tagged `py3-none-any` contains a platform binary.
+
+  Each platform wheel is installed into a clean virtual environment before it is
+  published, and the install fails the release unless `engine_backend()` reports
+  `rust` — a wheel whose compiled module will not load imports perfectly well and
+  falls back to the pure-Python engine, so nothing short of asking which engine
+  answered can tell the two apart.
+
+  **One documented gap: the x86_64 macOS wheel and binary are never executed
+  before release.** GitHub has retired every Intel macOS runner and the arm64
+  images carry no Rosetta, so there is nowhere in the pipeline that x86_64 Darwin
+  code can run. Those two artifacts are verified by reading the Mach-O header of
+  the compiled module and comparing it to the architecture the filename claims,
+  which catches a build silently made for the host, and by their platform tag.
+  Neither check is the same as having run them. The other three platforms are
+  installed and executed.
+
+- `hcuda` binaries attached to each GitHub Release for the same four platforms,
+  as `.tar.gz` on Unix and `.zip` on Windows, each with README, LICENSE and
+  CHANGELOG, plus one `SHA256SUMS` covering all four.
+
+- Every release artifact is mirrored to Cloudflare R2 under `hydracuda/<tag>/`,
+  keyed by tag and never overwritten in place, so a URL in release notes keeps
+  pointing at the bytes it originally pointed at. GitHub Releases remains the
+  source of truth. The account ID and bucket name are read from secrets rather
+  than written into the workflow.
+
+- A CI workflow, which this repository did not have. Every check was previously
+  one someone ran locally and remembered to run — which is how the v0.3.0 publish
+  failed on a build dependency's new metadata default without a line of this
+  repository changing. Pull requests now run pytest on 3.10 and 3.13, `cargo fmt
+  --check`, `clippy -D warnings`, `cargo test`, a job that builds both the
+  extension and `hcuda` so the parity suites run instead of skipping, and
+  `python -m build` with `twine check --strict`.
+
+- `tests/test_workflows.py` asserts what is static about the release pipeline: the
+  wheel and binary matrices cover the same four platforms, PyPI waits for all five
+  wheels before uploading anything, `id-token: write` is scoped to the publishing
+  job alone, all four Cloudflare values come from secrets, and no workflow names a
+  retired runner. That last one is not hypothetical — GitHub has retired every
+  Intel macOS runner, so `x86_64-apple-darwin` is cross-compiled from the arm64
+  runner and checked with `lipo` rather than executed.
+
+  It also pins how deeply each artifact is verified, because that differs by
+  platform and the matrix does not show it: every target declares whether it is
+  native, only the one known target is cross-compiled, each native wheel is
+  installed with `--only-binary` and asserted to run the compiled engine, and the
+  cross-compiled one has its architecture read. So a target cannot quietly drop
+  from "installed and run" to "the file exists".
+
+### Changed
+
+- `actions/checkout`, `actions/setup-python` and the artifact actions move to
+  their current majors, off the deprecated Node 20 runtime.
+
 ## 0.4.0 — 2026-09-10 — core extraction
 
 The decision engine moves into a standalone Rust crate and the Python package
