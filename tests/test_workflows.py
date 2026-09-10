@@ -34,6 +34,13 @@ TARGETS = {
     "x86_64-pc-windows-msvc",
 }
 
+#: The one target built on a runner of a different architecture, because GitHub
+#: retired every Intel macOS image and the arm64 ones carry no Rosetta. It is
+#: named here rather than derived so that a second cross-compiled target — which
+#: would be a second artifact nothing can execute before release — has to be an
+#: edit to this set and not a quiet matrix change.
+CROSS_COMPILED = {"x86_64-apple-darwin"}
+
 #: Runner labels GitHub has retired. `macos-13` was the last Intel image and
 #: `macos-14` went with it; the runner-images releases now carry only arm64
 #: macOS. A workflow naming one of these does not fail loudly — the job waits for
@@ -131,6 +138,96 @@ def test_the_universal_wheel_is_built_and_is_not_a_platform_wheel(publish):
 def test_pypi_waits_for_every_wheel_before_uploading(publish):
     """PyPI is append-only per version, so a partial upload cannot be fixed."""
     assert set(publish["jobs"]["pypi"]["needs"]) == {"universal", "wheels"}
+
+
+# --- verification depth ---
+#
+# How far each artifact is checked before it ships differs by target, and the
+# difference is not visible from the matrix. These tests pin the two tiers so a
+# target cannot quietly drop from "installed and run" to "the file exists".
+
+
+def steps(job: dict) -> list[dict]:
+    return job["steps"]
+
+
+def step_running(job: dict, fragment: str) -> dict | None:
+    for step in steps(job):
+        if fragment in step.get("run", ""):
+            return step
+    return None
+
+
+def non_native(job: dict) -> set[str]:
+    return {
+        entry["target"]
+        for entry in job["strategy"]["matrix"]["include"]
+        if not entry.get("native")
+    }
+
+
+@pytest.mark.parametrize("job_name", ["wheels", "binaries"])
+def test_every_target_declares_whether_it_is_native(publish, job_name):
+    """`native` decides how far the target can be verified, so it is not optional.
+
+    An entry missing the key reads as non-native, which would silently *skip* the
+    execution check rather than fail it.
+    """
+    for entry in publish["jobs"][job_name]["strategy"]["matrix"]["include"]:
+        assert "native" in entry, f"{job_name}: {entry['target']} does not say"
+
+
+@pytest.mark.parametrize("job_name", ["wheels", "binaries"])
+def test_only_the_known_target_is_cross_compiled(publish, job_name):
+    """A new cross-compiled target is an artifact nothing can run before release."""
+    assert non_native(publish["jobs"][job_name]) == CROSS_COMPILED
+
+
+def test_every_native_wheel_is_installed_and_the_compiled_engine_asserted(publish):
+    """Building a wheel does not prove it works.
+
+    `hydracuda` imports fine when `_core` fails to load — it falls back to the
+    pure-Python engine — so a wheel carrying a broken module installs, runs, and
+    passes anything that does not check which engine answered.
+    """
+    step = step_running(publish["jobs"]["wheels"], "pip install")
+    assert step is not None, "no wheel job step installs the wheel it built"
+    assert step.get("if") == "matrix.native"
+    assert 'backend != "rust"' in step["run"], "installs the wheel but not asserting"
+
+    # Asserted against the invoking line, not the whole script: the step explains
+    # the flag in a comment, and a substring check over the body is satisfied by
+    # that comment even after the flag itself is gone.
+    invocations = [
+        line
+        for line in step["run"].splitlines()
+        if "pip install" in line and not line.lstrip().startswith("#")
+    ]
+    assert invocations, "the only mention of pip install is a comment"
+    for line in invocations:
+        # Without this, a wheel that will not install is rescued by pip falling
+        # back to building the sdist, which yields a working pure-Python install
+        # and a green step.
+        assert "--only-binary" in line, f"pip may fall back to the sdist: {line}"
+
+
+def test_the_wheel_that_cannot_be_executed_has_its_architecture_read(publish):
+    """The cross-compiled wheel's one real check.
+
+    maturin derives the platform tag from `--target`, so the tag agreeing with the
+    target is true by construction. Reading the Mach-O header is what would catch
+    a module built for the host and named for the target.
+    """
+    step = step_running(publish["jobs"]["wheels"], "lipo -archs")
+    assert step is not None, "nothing reads the architecture of the compiled module"
+    assert step.get("if") == "runner.os == 'macOS'"
+    assert 'test "$archs" = "$EXPECTED"' in step["run"], "not compared to the target"
+
+    # Every macOS target has to supply the expected architecture, or the
+    # comparison above is against an empty string.
+    for entry in publish["jobs"]["wheels"]["strategy"]["matrix"]["include"]:
+        if "apple-darwin" in entry["target"]:
+            assert entry.get("arch"), f"{entry['target']} has no `arch`"
 
 
 # --- credentials ---

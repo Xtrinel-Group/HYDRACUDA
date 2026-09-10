@@ -76,15 +76,26 @@ jobs:
         # from the arm64 runner. That is fine for an abi3 extension: on macOS it
         # resolves Python symbols by dynamic lookup at load time rather than
         # linking libpython, so no x86_64 interpreter is needed to build it.
+        #
+        # `native` is what decides how far a wheel can be verified here, so it is
+        # recorded per target rather than inferred: a wheel whose architecture
+        # matches the runner is installed and imported, and one that does not can
+        # only be inspected.
         include:
           - runner: macos-15
             target: aarch64-apple-darwin
+            arch: arm64
+            native: true
           - runner: macos-15
             target: x86_64-apple-darwin
+            arch: x86_64
+            native: false
           - runner: ubuntu-latest
             target: x86_64-unknown-linux-gnu
+            native: true
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
+            native: true
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -134,9 +145,11 @@ jobs:
           if "hydracuda/engine.py" not in names:
               sys.exit(f"{wheel} has the module but not the Python package")
 
-          # The x86_64 macOS wheel is cross-compiled, so the failure to guard is a
-          # wheel built for the host and named for the target. The platform tag is
-          # what pip matches on, so checking it is checking what users get.
+          # The platform tag is what pip matches on, so a wheel tagged for the
+          # wrong platform is invisible to the users who need it. Note what this
+          # does *not* establish: maturin derives the tag from `--target`, so the
+          # tag agreeing with the target is true by construction and says nothing
+          # about the architecture of the code inside. That is the next step's job.
           required = {
               "aarch64-apple-darwin": ("macosx", "arm64"),
               "x86_64-apple-darwin": ("macosx", "x86_64"),
@@ -149,6 +162,86 @@ jobs:
 
           print(f"{wheel}: {modules[0]}")
           PY
+
+      # Reads the Mach-O header of the module itself, which is the one check that
+      # a cross-compile cannot satisfy by accident. Everything above compares
+      # names; this compares the compiled code to the architecture it is sold as.
+      # macOS only because `lipo` is, and because macOS is where the cross-compile
+      # happens — the other three targets build on a runner of their own
+      # architecture and are covered by installing them below.
+      - name: the compiled module is built for the architecture it claims
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          EXPECTED: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          wheel=$(ls dist/*.whl)
+          rm -rf unpacked
+          python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall('unpacked')" "$wheel"
+
+          module=$(find unpacked -name '_core*.so' -print -quit)
+          if [ -z "$module" ]; then
+            echo "::error::no _core extension module inside $wheel"
+            exit 1
+          fi
+
+          file "$module"
+          archs=$(lipo -archs "$module")
+          echo "$module: $archs (expected $EXPECTED)"
+          # Equality, not a substring: a universal2 module would report
+          # "x86_64 arm64" and pass a looser check while being twice the size of
+          # what the tag promises.
+          test "$archs" = "$EXPECTED"
+          rm -rf unpacked
+
+      # A wheel that exists is not a wheel that works. This installs the real
+      # artifact into a clean venv and asserts the compiled engine is what runs —
+      # if `_core` fails to load, `hydracuda` imports anyway and silently falls
+      # back to the pure-Python engine, which is exactly the failure a file
+      # listing cannot see.
+      #
+      # Skipped for x86_64 macOS, which is a genuine gap rather than an oversight:
+      # GitHub retired every Intel macOS runner and the arm64 images do not carry
+      # Rosetta, so there is nowhere in this pipeline that x86_64 Darwin code can
+      # be executed. That wheel ships verified by `lipo` and by its tag only.
+      - name: the wheel installs and the compiled engine is what runs
+        if: matrix.native
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel=$(ls dist/*.whl)
+          python -m venv .wheelcheck
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            venv=".wheelcheck/Scripts"
+          else
+            venv=".wheelcheck/bin"
+          fi
+
+          # `--only-binary :all:` so a wheel that somehow will not install cannot
+          # be papered over by pip falling back to building the sdist, which would
+          # produce a working pure-Python install and a passing step.
+          "$venv/python" -m pip install --quiet --only-binary :all: "$wheel"
+
+          "$venv/python" - <<'PY'
+          import hydracuda
+          from hydracuda import engine_backend
+
+          backend = engine_backend()
+          print("import:", hydracuda.__file__)
+          print("backend:", backend)
+          if backend != "rust":
+              raise SystemExit(
+                  f"installed the platform wheel and got the {backend} engine: "
+                  "the compiled module did not load"
+              )
+          PY
+
+          # The console script's entry point, on the installed artifact rather than
+          # the checkout. `python -m` rather than the script name so this is one
+          # command on all three platforms.
+          "$venv/python" -m hydracuda test examples/policy.yaml
+          rm -rf .wheelcheck
 
       - uses: actions/upload-artifact@v7
         with:

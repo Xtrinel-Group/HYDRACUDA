@@ -23,6 +23,21 @@
   checkout, so without it whichever ran second would decide whether the artifact
   tagged `py3-none-any` contains a platform binary.
 
+  Each platform wheel is installed into a clean virtual environment before it is
+  published, and the install fails the release unless `engine_backend()` reports
+  `rust` — a wheel whose compiled module will not load imports perfectly well and
+  falls back to the pure-Python engine, so nothing short of asking which engine
+  answered can tell the two apart.
+
+  **One documented gap: the x86_64 macOS wheel and binary are never executed
+  before release.** GitHub has retired every Intel macOS runner and the arm64
+  images carry no Rosetta, so there is nowhere in the pipeline that x86_64 Darwin
+  code can run. Those two artifacts are verified by reading the Mach-O header of
+  the compiled module and comparing it to the architecture the filename claims,
+  which catches a build silently made for the host, and by their platform tag.
+  Neither check is the same as having run them. The other three platforms are
+  installed and executed.
+
 - `hcuda` binaries attached to each GitHub Release for the same four platforms,
   as `.tar.gz` on Unix and `.zip` on Windows, each with README, LICENSE and
   CHANGELOG, plus one `SHA256SUMS` covering all four.
@@ -48,6 +63,13 @@
   retired runner. That last one is not hypothetical — GitHub has retired every
   Intel macOS runner, so `x86_64-apple-darwin` is cross-compiled from the arm64
   runner and checked with `lipo` rather than executed.
+
+  It also pins how deeply each artifact is verified, because that differs by
+  platform and the matrix does not show it: every target declares whether it is
+  native, only the one known target is cross-compiled, each native wheel is
+  installed with `--only-binary` and asserted to run the compiled engine, and the
+  cross-compiled one has its architecture read. So a target cannot quietly drop
+  from "installed and run" to "the file exists".
 
 ### Changed
 
