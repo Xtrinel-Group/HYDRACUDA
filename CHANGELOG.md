@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-10 — core extraction
+
+The decision engine moves into a standalone Rust crate and the Python package
+becomes a binding over it, with the pure-Python engine kept permanently as the
+fallback. Nothing about the public Python API changes, and
+`tests/test_backend_parity.py` plus a committed differential corpus hold the two
+engines to identical decisions.
+
+Distribution is unchanged in this release: the PyPI wheel is still pure Python,
+and the `hcuda` binary is built from a checkout rather than downloaded. Publishing
+prebuilt platform wheels and binaries is the next release.
 
 ### Added
 

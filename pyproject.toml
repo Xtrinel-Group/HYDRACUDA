@@ -15,7 +15,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hydracuda"
-version = "0.3.1"
+version = "0.4.0"
 description = "Hybrid Runtime Access Control for Untrusted Delegated Actions. Runtime policy enforcement proxy for AI tool calls."
 readme = "README.md"
 license = { file = "LICENSE" }
