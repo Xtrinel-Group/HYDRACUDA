@@ -91,6 +91,57 @@ def test_the_readme_lists_every_audit_column():
         assert f"`{column}`" in text, f"audit column {column} is undocumented"
 
 
+def test_the_specified_tests_block_is_marked_as_not_implemented():
+    """`tests:` is specified ahead of the loader that will accept it.
+
+    A spec section that reads as current behaviour is worse than no section: the
+    loader rejects `tests` today, so anyone copying it gets a load error. The
+    status marker is the part that has to survive editing.
+    """
+    text = SPEC.read_text()
+    assert "## Test cases (`tests:`)" in text
+    heading, _, body = text.partition("## Test cases (`tests:`)")
+    status = body[: body.index("##")]
+    assert "not yet implemented" in status.lower()
+    assert "0.4.0" in status
+
+
+def test_no_loadable_policy_example_uses_the_unimplemented_tests_block():
+    """Guard, and a reminder to delete itself.
+
+    Every complete policy example in the docs is parsed by the real loader, and
+    the loader rejects `tests`. So while it is unimplemented the block may only
+    appear as a fragment. When 0.4.0 teaches the loader to accept it, this test
+    should be removed and `tests:` shown in a full example instead.
+    """
+    from hydracuda.policy import parse_policy
+
+    with pytest.raises(Exception):
+        parse_policy({"version": 2, "rules": [], "tests": []})
+
+    for path in (README, SPEC):
+        for index, block in enumerate(policy_blocks(path)):
+            assert "tests:" not in block, (
+                f"{path.name} policy block {index} uses `tests:`, which the "
+                "loader rejects; keep it a fragment until 0.4.0 lands"
+            )
+
+
+def test_the_tests_block_schema_does_not_reuse_the_condition_key_names():
+    """`params`/`context` hold values; `where`/`when` hold operators.
+
+    If the schema ever adopts `where:`/`when:` for test cases, an operator map
+    pasted into a case becomes a literal value instead of a schema error. The
+    spec explains this, so the explanation should not outlive the decision.
+    """
+    body = SPEC.read_text().partition("## Test cases (`tests:`)")[2]
+    section = body[: body.index("\n## ")]
+
+    assert "params:" in section and "context:" in section
+    for key in ("name", "resource", "expect"):
+        assert f"| `{key}` |" in section
+
+
 def test_the_readme_states_that_shadow_mode_does_not_block():
     text = README.read_text().lower()
     assert "shadow" in text
