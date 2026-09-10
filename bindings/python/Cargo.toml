@@ -1,0 +1,24 @@
+[package]
+name = "hydracuda-python"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "PyO3 bindings exposing the HYDRACUDA decision engine to Python."
+publish = false
+
+[lib]
+# `_core` because it is an implementation detail: `hydracuda/__init__.py` decides
+# whether to use it, and every public name stays where it was.
+name = "_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+hydracuda-core = { path = "../../core" }
+indexmap.workspace = true
+
+# `abi3-py310` matches `requires-python = ">=3.10"`: one wheel per platform
+# rather than one per interpreter version, and a wheel built today keeps working
+# on Python versions released later.
+pyo3 = { version = "0.29", features = ["abi3-py310", "extension-module"] }

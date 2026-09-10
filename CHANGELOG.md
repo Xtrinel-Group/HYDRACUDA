@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Added
+
+- The decision engine can now run compiled. `hydracuda._core`, a PyO3 extension
+  over the `hydracuda-core` crate, is used when it is present; the pure-Python
+  engine is used when it is not. Both are supported, and both stay: a platform
+  with no wheel installs the universal one and behaves identically, with no Rust
+  toolchain needed. `hydracuda.engine_backend()` reports which is live and
+  `HYDRACUDA_ENGINE=python|rust` forces one.
+
+  What crosses into Rust is the verdict only — the `(action, reason, rule)`
+  triple. Loading, validation, adapters, the proxy, the audit log and the
+  `Decision` object are unchanged Python, so nothing about the public API moves.
+  The full test suite passes on both engines and `tests/test_backend_parity.py`
+  runs both in one process over the differential corpus, comparing every field of
+  every decision.
+
+  One deliberate difference: a request parameter the compiled engine cannot
+  represent — a tuple, a set, an arbitrary object — is refused with an error
+  rather than coerced. No policy file produces such a value. Coercing would mean
+  a `matches` rule comparing against a different string than before, which is a
+  rule that quietly stops firing.
+
+  Nothing published changes yet: the wheels on PyPI remain pure Python. Building
+  the extension locally is `python scripts/build_extension.py`.
+
 ### Documentation
 
 - `docs/policy-spec.md` specifies the `tests:` block: test case keys, how

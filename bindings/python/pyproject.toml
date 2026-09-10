@@ -1,0 +1,28 @@
+# Build configuration for the compiled engine, kept next to the crate.
+#
+# This file exists to stop maturin walking up to the repository root and reading
+# the *pure-Python* project's metadata, which it does otherwise — producing a
+# wheel called `hydracuda` at the pure-Python version, which would collide with
+# the real distribution.
+#
+# Nothing publishes this project. `scripts/build_extension.py` builds it and
+# copies the module into `src/hydracuda/`, which is what makes
+# `from hydracuda import _core` resolve under the editable install. Where the
+# module sits *inside a wheel* is Step 4's problem: `module-name` below is only
+# honoured in maturin's mixed layout, so the wheel currently lays the module down
+# as `_core/`, and the arrangement that ships is a root `pyproject.toml` with
+# `python-source = "src"`. Until then the root project still builds the
+# pure-Python distribution with hatchling.
+
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "hydracuda-core-ext"
+description = "Compiled decision engine for HYDRACUDA. Not published separately."
+requires-python = ">=3.10"
+dynamic = ["version"]
+
+[tool.maturin]
+module-name = "hydracuda._core"

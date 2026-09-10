@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core"]
+members = ["core", "bindings/python"]
 
 # The Python bindings (`bindings/python`) and the standalone CLI (`cli`) join
 # this list in later steps of 0.4.0. `core` is the decision engine and nothing

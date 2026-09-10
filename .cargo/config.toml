@@ -1,0 +1,14 @@
+# A PyO3 `extension-module` cdylib deliberately leaves the CPython symbols
+# undefined: the interpreter that loads it provides them. Apple's linker rejects
+# undefined symbols by default, so `cargo build`/`cargo clippy` on
+# `bindings/python` fails on macOS without this — with a wall of
+# "Undefined symbols: _PyBaseObject_Type" that looks like a code error and is
+# not. Linux and Windows need no equivalent.
+#
+# maturin passes these itself, so a `maturin build` never depended on this file;
+# it is here so the ordinary cargo commands work on a developer's Mac.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

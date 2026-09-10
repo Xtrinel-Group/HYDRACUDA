@@ -20,3 +20,9 @@ hydracuda-favicon.zip
 # Cargo build output. `Cargo.lock` is committed on purpose: this workspace
 # produces a published binary, so the build must be reproducible.
 /target/
+
+# The compiled engine, built in place by `scripts/build_extension.py`. Machine-
+# specific, so it is built rather than committed; without it `hydracuda` runs on
+# the pure-Python engine.
+/src/hydracuda/_core*.so
+/src/hydracuda/_core*.pyd
