@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = ["core"]
+
+# The Python bindings (`bindings/python`) and the standalone CLI (`cli`) join
+# this list in later steps of 0.4.0. `core` is the decision engine and nothing
+# else: no I/O, no clock, no network. That is the property the rest of the
+# release depends on, so it gets a crate of its own rather than a module inside
+# a binary.
+[workspace.package]
+version = "0.4.0-dev"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT"
+repository = "https://github.com/Xtrinel-Group/HYDRACUDA"
+
+[workspace.dependencies]
+# A superset of the `regex` crate's syntax that also supports lookaround and
+# backreferences, which `regex` refuses. Policy files were written against
+# Python's `re`, so the narrower engine would turn working deny rules into load
+# errors. See `core/src/conditions.rs` for the syntax gap that remains.
+fancy-regex = "0.19"
+indexmap = "2"
+# Chosen over `serde_yaml` for two reasons. It exposes scalar *style*, which is
+# what lets `core/src/yaml.rs` apply PyYAML's YAML 1.1 resolvers to plain scalars
+# only — `allow: no` is a boolean and `allow: 'no'` is not, and getting that
+# wrong changes decisions. And `serde_yaml` is formally deprecated and
+# unmaintained, which is not a dependency to put under an enforcement path.
+yaml-rust2 = "0.12"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

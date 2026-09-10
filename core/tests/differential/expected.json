@@ -1,0 +1,1800 @@
+{
+  "scalars": {
+    "no": {
+      "repr": "False",
+      "type": "bool"
+    },
+    "No": {
+      "repr": "False",
+      "type": "bool"
+    },
+    "NO": {
+      "repr": "False",
+      "type": "bool"
+    },
+    "yes": {
+      "repr": "True",
+      "type": "bool"
+    },
+    "on": {
+      "repr": "True",
+      "type": "bool"
+    },
+    "off": {
+      "repr": "False",
+      "type": "bool"
+    },
+    "true": {
+      "repr": "True",
+      "type": "bool"
+    },
+    "True": {
+      "repr": "True",
+      "type": "bool"
+    },
+    "TRUE": {
+      "repr": "True",
+      "type": "bool"
+    },
+    "false": {
+      "repr": "False",
+      "type": "bool"
+    },
+    "y": {
+      "repr": "'y'",
+      "type": "str"
+    },
+    "n": {
+      "repr": "'n'",
+      "type": "str"
+    },
+    "~": {
+      "repr": "None",
+      "type": "NoneType"
+    },
+    "null": {
+      "repr": "None",
+      "type": "NoneType"
+    },
+    "NULL": {
+      "repr": "None",
+      "type": "NoneType"
+    },
+    "Null": {
+      "repr": "None",
+      "type": "NoneType"
+    },
+    "0": {
+      "repr": "0",
+      "type": "int"
+    },
+    "00": {
+      "repr": "0",
+      "type": "int"
+    },
+    "012": {
+      "repr": "10",
+      "type": "int"
+    },
+    "08": {
+      "repr": "'08'",
+      "type": "str"
+    },
+    "0o17": {
+      "repr": "'0o17'",
+      "type": "str"
+    },
+    "0x1f": {
+      "repr": "31",
+      "type": "int"
+    },
+    "0X1F": {
+      "repr": "'0X1F'",
+      "type": "str"
+    },
+    "0b101": {
+      "repr": "5",
+      "type": "int"
+    },
+    "1_000": {
+      "repr": "1000",
+      "type": "int"
+    },
+    "+1": {
+      "repr": "1",
+      "type": "int"
+    },
+    "-7": {
+      "repr": "-7",
+      "type": "int"
+    },
+    "1:30": {
+      "repr": "90",
+      "type": "int"
+    },
+    "10:20:30": {
+      "repr": "37230",
+      "type": "int"
+    },
+    "1:30.5": {
+      "repr": "90.5",
+      "type": "float"
+    },
+    ".5": {
+      "repr": "0.5",
+      "type": "float"
+    },
+    "5.": {
+      "repr": "5.0",
+      "type": "float"
+    },
+    "-1.5": {
+      "repr": "-1.5",
+      "type": "float"
+    },
+    "1.0e+5": {
+      "repr": "100000.0",
+      "type": "float"
+    },
+    "1e5": {
+      "repr": "'1e5'",
+      "type": "str"
+    },
+    "1.0e5": {
+      "repr": "'1.0e5'",
+      "type": "str"
+    },
+    "1e+5": {
+      "repr": "'1e+5'",
+      "type": "str"
+    },
+    "1E+5": {
+      "repr": "'1E+5'",
+      "type": "str"
+    },
+    ".inf": {
+      "repr": "inf",
+      "type": "float"
+    },
+    "-.INF": {
+      "repr": "-inf",
+      "type": "float"
+    },
+    ".nan": {
+      "repr": "nan",
+      "type": "float"
+    },
+    "2026-09-09": {
+      "repr": "datetime.date(2026, 9, 9)",
+      "type": "date"
+    },
+    "2026-9-9": {
+      "repr": "'2026-9-9'",
+      "type": "str"
+    },
+    "'no'": {
+      "repr": "'no'",
+      "type": "str"
+    },
+    "\"012\"": {
+      "repr": "'012'",
+      "type": "str"
+    },
+    "not-a-number": {
+      "repr": "'not-a-number'",
+      "type": "str"
+    },
+    "1.2.3": {
+      "repr": "'1.2.3'",
+      "type": "str"
+    },
+    "fs.**": {
+      "repr": "'fs.**'",
+      "type": "str"
+    }
+  },
+  "regexes": [
+    {
+      "pattern": "passwd$",
+      "matches": [
+        true,
+        true,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "passwd\\Z",
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^/etc/",
+      "matches": [
+        true,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "\\.\\.",
+      "matches": [
+        true,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^(?!/tmp/).*\\.key$",
+      "matches": [
+        true,
+        false,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "(?P<seg>[a-z]+)/(?P=seg)",
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "[$]",
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "cost\\$",
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "(?m)^x$",
+      "matches": [
+        true,
+        false,
+        true
+      ]
+    },
+    {
+      "pattern": "(?i)SECRET",
+      "matches": [
+        true,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "True",
+      "matches": [
+        true,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^/proc/\\d+",
+      "matches": [
+        true,
+        false,
+        true
+      ]
+    }
+  ],
+  "examples": [
+    {
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "block-sensitive-paths",
+          "allow-file-reads",
+          "block-destructive-deletes",
+          "shell-requires-approval"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "read_file",
+          "delete_record",
+          "execute_shell"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "allow-file-reads",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "read_file",
+          "action": "deny",
+          "reason": "read_file: path is outside the permitted surface",
+          "rule": "block-sensitive-paths",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "read_file",
+          "action": "deny",
+          "reason": "read_file: path is outside the permitted surface",
+          "rule": "block-sensitive-paths",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "read_file",
+          "action": "deny",
+          "reason": "read_file: path is outside the permitted surface",
+          "rule": "block-sensitive-paths",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "allow-file-reads",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "delete_record",
+          "action": "deny",
+          "reason": "Destructive operation. Blocked by default.",
+          "rule": "block-destructive-deletes",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "execute_shell",
+          "action": "review",
+          "reason": "tool requires human review",
+          "rule": "shell-requires-approval",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "write_file",
+          "action": "deny",
+          "reason": "write_file: no matching rule — default deny",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ],
+      "path": "examples/policy.yaml"
+    },
+    {
+      "policy": {
+        "version": 1,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: not listed in policy — default deny",
+        "rules": [
+          "legacy:read_file:path:deny_pattern[0]",
+          "legacy:read_file:path:deny_pattern[1]",
+          "legacy:read_file:path:deny_pattern[2]",
+          "legacy:read_file:allow",
+          "legacy:delete_record:blocked",
+          "legacy:execute_shell:review"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "read_file",
+          "delete_record",
+          "execute_shell"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "legacy:read_file:allow",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "read_file",
+          "action": "deny",
+          "reason": "read_file: parameter 'path' matched deny pattern '/etc/'",
+          "rule": "legacy:read_file:path:deny_pattern[0]",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "read_file",
+          "action": "deny",
+          "reason": "read_file: parameter 'path' matched deny pattern '\\.\\.'",
+          "rule": "legacy:read_file:path:deny_pattern[1]",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "read_file",
+          "action": "deny",
+          "reason": "read_file: parameter 'path' matched deny pattern '/root/'",
+          "rule": "legacy:read_file:path:deny_pattern[2]",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "legacy:read_file:allow",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "delete_record",
+          "action": "deny",
+          "reason": "Destructive operation. Blocked by default.",
+          "rule": "legacy:delete_record:blocked",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "execute_shell",
+          "action": "review",
+          "reason": "tool requires human review",
+          "rule": "legacy:execute_shell:review",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "write_file",
+          "action": "deny",
+          "reason": "write_file: not listed in policy — default deny",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ],
+      "path": "examples/policy-v1-legacy.yaml"
+    },
+    {
+      "policy": {
+        "version": 2,
+        "mode": "shadow",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "untrusted-agents-read-only",
+          "untrusted-agents-must-state-a-mode",
+          "no-writes-outside-workspace",
+          "writes-must-state-a-path",
+          "deletes-need-approval",
+          "allow-filesystem",
+          "github-reads-allowed",
+          "github-writes-need-approval"
+        ],
+        "when_fields": [
+          "trust"
+        ],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "filesystem.read_file",
+          "filesystem.write_file",
+          "filesystem.delete_file",
+          "github.repository.read",
+          "github.repository.write",
+          "github.issue.comment"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "filesystem.read_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "allow-filesystem",
+          "mode": "shadow",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "filesystem.read_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "allow-filesystem",
+          "mode": "shadow",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "filesystem.write_file",
+          "action": "deny",
+          "reason": "untrusted agents may not perform write actions",
+          "rule": "untrusted-agents-read-only",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "filesystem.write_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "allow-filesystem",
+          "mode": "shadow",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "filesystem.write_file",
+          "action": "deny",
+          "reason": "writes are confined to /workspace",
+          "rule": "no-writes-outside-workspace",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "filesystem.write_file",
+          "action": "deny",
+          "reason": "a write must state the path it targets",
+          "rule": "writes-must-state-a-path",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "filesystem.delete_file",
+          "action": "review",
+          "reason": "tool requires human review",
+          "rule": "deletes-need-approval",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "filesystem.read_file",
+          "action": "deny",
+          "reason": "untrusted agents must state the mode of the action",
+          "rule": "untrusted-agents-must-state-a-mode",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "github.repository.read",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "github-reads-allowed",
+          "mode": "shadow",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "github.repository.write",
+          "action": "review",
+          "reason": "tool requires human review",
+          "rule": "github-writes-need-approval",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "github.issue.comment",
+          "action": "review",
+          "reason": "tool requires human review",
+          "rule": "github-writes-need-approval",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "github.repository.read",
+          "action": "deny",
+          "reason": "untrusted agents may not perform write actions",
+          "rule": "untrusted-agents-read-only",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "unknown.resource",
+          "action": "deny",
+          "reason": "unknown.resource: no matching rule — default deny",
+          "rule": null,
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        }
+      ],
+      "path": "examples/policy-advanced.yaml"
+    }
+  ],
+  "policies": [
+    {
+      "name": "empty-version-2-fails-closed",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": []
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "fs.read: no matching rule — default deny",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "",
+          "action": "deny",
+          "reason": ": no matching rule — default deny",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "first-match-wins",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "broad",
+          "narrow"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "fs.read"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "broad",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "fs.write.bytes",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "broad",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "fs",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "broad",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "net.get",
+          "action": "deny",
+          "reason": "net.get: no matching rule — default deny",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "resource-wildcards",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "allow",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "one-segment",
+          "prefix",
+          "middle"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": []
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "one-segment",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "fs.read.bytes",
+          "action": "allow",
+          "reason": "fs.read.bytes: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "fs",
+          "action": "allow",
+          "reason": "fs: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "net.read_all",
+          "action": "review",
+          "reason": "tool requires human review",
+          "rule": "prefix",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "net.read",
+          "action": "allow",
+          "reason": "net.read: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "db.write",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "middle",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "db.users.write",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "middle",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "db.users.rows.write",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "middle",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "db.users.read",
+          "action": "allow",
+          "reason": "db.users.read: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        }
+      ]
+    },
+    {
+      "name": "where-and-when-must-both-hold",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "allow",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "block-etc-in-prod"
+        ],
+        "when_fields": [
+          "environment"
+        ],
+        "unpinned_when_fields": [
+          "environment"
+        ],
+        "declared_resources": [
+          "fs.read"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "reading {resource} outside dev is refused",
+          "rule": "block-etc-in-prod",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "reason": "fs.read: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "reason": "fs.read: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "reason": "fs.read: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "fs.write",
+          "action": "allow",
+          "reason": "fs.write: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        }
+      ]
+    },
+    {
+      "name": "every-operator",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "allow",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "eq",
+          "ne",
+          "in",
+          "nin",
+          "m",
+          "nm",
+          "p",
+          "np",
+          "a",
+          "na"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "op.eq",
+          "op.ne",
+          "op.in",
+          "op.nin",
+          "op.m",
+          "op.nm",
+          "op.p",
+          "op.np",
+          "op.a",
+          "op.na"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "op.eq",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "eq",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.eq",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "eq",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.eq",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "eq",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.eq",
+          "action": "allow",
+          "reason": "op.eq: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.eq",
+          "action": "allow",
+          "reason": "op.eq: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.eq",
+          "action": "allow",
+          "reason": "op.eq: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.ne",
+          "action": "allow",
+          "reason": "op.ne: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.ne",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "ne",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.ne",
+          "action": "allow",
+          "reason": "op.ne: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.in",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "in",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.in",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "in",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.in",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "in",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.in",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "in",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.in",
+          "action": "allow",
+          "reason": "op.in: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.nin",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "nin",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.nin",
+          "action": "allow",
+          "reason": "op.nin: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.m",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "m",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.m",
+          "action": "allow",
+          "reason": "op.m: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.m",
+          "action": "allow",
+          "reason": "op.m: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.nm",
+          "action": "allow",
+          "reason": "op.nm: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.nm",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "nm",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.p",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "p",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.p",
+          "action": "allow",
+          "reason": "op.p: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.np",
+          "action": "allow",
+          "reason": "op.np: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.np",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "np",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.a",
+          "action": "allow",
+          "reason": "op.a: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "op.a",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "a",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.na",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "na",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "op.na",
+          "action": "allow",
+          "reason": "op.na: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        }
+      ]
+    },
+    {
+      "name": "matches-stringifies-the-value",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "allow",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "t",
+          "n",
+          "f",
+          "l",
+          "d"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "s.bool",
+          "s.null",
+          "s.float",
+          "s.list",
+          "s.dict"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "s.bool",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "t",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "s.bool",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "t",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "s.bool",
+          "action": "allow",
+          "reason": "s.bool: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "s.null",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "n",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "s.null",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "n",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "s.float",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "f",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "s.float",
+          "action": "allow",
+          "reason": "s.float: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "s.list",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "l",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "s.dict",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "d",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "shadow-mode-does-not-enforce",
+      "policy": {
+        "version": 2,
+        "mode": "shadow",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "d",
+          "r",
+          "a"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "fs.read",
+          "fs.stat",
+          "fs.write"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "d",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "fs.stat",
+          "action": "review",
+          "reason": "tool requires human review",
+          "rule": "r",
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        },
+        {
+          "resource": "fs.write",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "a",
+          "mode": "shadow",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "fs.other",
+          "action": "deny",
+          "reason": "fs.other: no matching rule — default deny",
+          "rule": null,
+          "mode": "shadow",
+          "enforced": false,
+          "blocked": false
+        }
+      ]
+    },
+    {
+      "name": "review-mode-enforces",
+      "policy": {
+        "version": 2,
+        "mode": "review",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "d"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "fs.read"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "d",
+          "mode": "review",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "default-reason-is-a-template",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "review",
+        "default_reason": "{resource} needs sign-off ({action})",
+        "rules": [],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": []
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "review",
+          "reason": "fs.read needs sign-off (review)",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "default-reason-that-cannot-be-formatted",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "quantifier a{2,3} and {\"json\": true}",
+        "rules": [],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": []
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "quantifier a{2,3} and {\"json\": true}",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "audit-and-pinned-context",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": "/tmp/hydracuda-audit.jsonl",
+        "default_action": "allow",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "r"
+        ],
+        "when_fields": [
+          "agent",
+          "environment"
+        ],
+        "unpinned_when_fields": [
+          "agent"
+        ],
+        "declared_resources": [
+          "fs.read"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "r",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "reason": "fs.read: no matching rule — default allow",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        }
+      ]
+    },
+    {
+      "name": "adapters-declare-the-surface",
+      "policy": {
+        "version": 2,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: no matching rule — default {action}",
+        "rules": [
+          "r"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "fs.read",
+          "fs.write"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "fs.read",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "r",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        }
+      ]
+    },
+    {
+      "name": "version-1-translates-to-ordered-rules",
+      "policy": {
+        "version": 1,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: not listed in policy — default deny",
+        "rules": [
+          "legacy:read_file:path:deny_pattern[0]",
+          "legacy:read_file:path:deny_pattern[1]",
+          "legacy:read_file:allow",
+          "legacy:write_file:blocked",
+          "legacy:review_file:review",
+          "legacy:run:allow"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "read_file",
+          "write_file",
+          "review_file",
+          "run"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "legacy:read_file:allow",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "read_file",
+          "action": "deny",
+          "reason": "read_file: parameter 'path' matched deny pattern '\\.\\.'",
+          "rule": "legacy:read_file:path:deny_pattern[0]",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "read_file",
+          "action": "deny",
+          "reason": "read_file: parameter 'path' matched deny pattern '^/etc/'",
+          "rule": "legacy:read_file:path:deny_pattern[1]",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "read_file",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "legacy:read_file:allow",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "write_file",
+          "action": "deny",
+          "reason": "writes are off",
+          "rule": "legacy:write_file:blocked",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "review_file",
+          "action": "review",
+          "reason": "tool requires human review",
+          "rule": "legacy:review_file:review",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        },
+        {
+          "resource": "run",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "legacy:run:allow",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        },
+        {
+          "resource": "deploy",
+          "action": "deny",
+          "reason": "deploy: not listed in policy — default deny",
+          "rule": null,
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "version-1-allow-no-is-a-yaml-boolean",
+      "policy": {
+        "version": 1,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: not listed in policy — default deny",
+        "rules": [
+          "legacy:t:blocked"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "t"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "t",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "legacy:t:blocked",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "version-1-allow-zero-is-a-fail-open-quirk",
+      "policy": {
+        "version": 1,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: not listed in policy — default deny",
+        "rules": [
+          "legacy:t:allow"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "t"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "t",
+          "action": "allow",
+          "reason": "all policy checks passed",
+          "rule": "legacy:t:allow",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": false
+        }
+      ]
+    },
+    {
+      "name": "version-1-empty-reason-falls-back-to-the-action",
+      "policy": {
+        "version": 1,
+        "mode": "enforce",
+        "audit_path": ".hydracuda/audit.db",
+        "default_action": "deny",
+        "default_reason": "{resource}: not listed in policy — default deny",
+        "rules": [
+          "legacy:t:blocked"
+        ],
+        "when_fields": [],
+        "unpinned_when_fields": [],
+        "declared_resources": [
+          "t"
+        ]
+      },
+      "decisions": [
+        {
+          "resource": "t",
+          "action": "deny",
+          "reason": "tool blocked by policy",
+          "rule": "legacy:t:blocked",
+          "mode": "enforce",
+          "enforced": true,
+          "blocked": true
+        }
+      ]
+    },
+    {
+      "name": "error-unknown-top-level-key",
+      "load_error": "Policy file: unrecognized key(s) ['rulez']. 'rulez' — did you mean 'rules'? Allowed: ['adapters', 'audit', 'audit_path', 'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'version']"
+    },
+    {
+      "name": "error-camel-case-drift",
+      "load_error": "Policy file: unrecognized key(s) ['defaultAction']. 'defaultAction' — did you mean 'default_action'? Allowed: ['adapters', 'audit', 'audit_path', 'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'version']"
+    },
+    {
+      "name": "error-rate-limit-is-rejected",
+      "load_error": "Policy file: 'rate_limit' is not enforced by HYDRACUDA and never has been — it was parsed and discarded in v0.1.0-v0.2.0. Remove it. Rate limiting is stateful and belongs in the calling layer; leaving the key in a policy file asserts a control that does not exist."
+    },
+    {
+      "name": "error-tests-block-is-not-recognized-yet",
+      "load_error": "Policy file: unrecognized key(s) ['tests']. Allowed: ['adapters', 'audit', 'audit_path', 'default_action', 'default_reason', 'mode', 'pinned_context', 'rules', 'version']"
+    },
+    {
+      "name": "error-missing-version",
+      "load_error": "Policy file missing required key: 'version'"
+    },
+    {
+      "name": "error-version-is-a-bool",
+      "load_error": "'version' must be an integer, got bool"
+    },
+    {
+      "name": "error-unsupported-version",
+      "load_error": "Unsupported policy version 3 — supported: [1, 2]"
+    },
+    {
+      "name": "error-bad-mode",
+      "load_error": "'mode' must be one of ['enforce', 'review', 'shadow'], got 'audit'"
+    },
+    {
+      "name": "error-not-a-mapping",
+      "load_error": "Policy file must be a YAML mapping, got list"
+    },
+    {
+      "name": "error-empty-file",
+      "load_error": "Policy file must be a YAML mapping, got NoneType"
+    },
+    {
+      "name": "error-rule-without-resource",
+      "load_error": "rules[0]: 'resource' is required and must be a string"
+    },
+    {
+      "name": "error-rule-without-action",
+      "load_error": "rules[0]: 'action' must be one of ['allow', 'deny', 'review'], got None"
+    },
+    {
+      "name": "error-rule-with-bad-action",
+      "load_error": "rules[0]: 'action' must be one of ['allow', 'deny', 'review'], got 'permit'"
+    },
+    {
+      "name": "error-unknown-operator",
+      "load_error": "rules[0].where.path: unknown operator 'contains' — allowed: ['absent', 'equals', 'in', 'matches', 'not_equals', 'not_in', 'not_matches', 'present']"
+    },
+    {
+      "name": "error-operator-typo-gets-a-suggestion",
+      "load_error": "rules[0].where.path: unknown operator 'matchs' — allowed: ['absent', 'equals', 'in', 'matches', 'not_equals', 'not_in', 'not_matches', 'present']"
+    },
+    {
+      "name": "error-malformed-regex",
+      "load_error": "rules[0].where.path.matches: invalid regex <engine-specific detail elided>"
+    },
+    {
+      "name": "error-present-must-be-a-boolean",
+      "load_error": "rules[0].where.path.present must be true or false"
+    },
+    {
+      "name": "error-in-must-be-a-list",
+      "load_error": "rules[0].where.path.in must be a list"
+    },
+    {
+      "name": "error-version-1-requires-tools",
+      "load_error": "Policy file missing required key: 'tools'"
+    },
+    {
+      "name": "error-version-1-bad-allow",
+      "load_error": "Tool 't': 'allow' must be true, false, or 'review', got 'maybe'"
+    },
+    {
+      "name": "error-adapter-without-type",
+      "load_error": "adapters[0]: 'type' is required and must be a string"
+    },
+    {
+      "name": "error-unknown-rule-key",
+      "load_error": "rules[0]: unrecognized key(s) ['wher']. 'wher' — did you mean 'where'? Allowed: ['action', 'name', 'reason', 'resource', 'when', 'where']"
+    }
+  ]
+}
